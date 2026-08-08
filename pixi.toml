@@ -1,0 +1,16 @@
+[workspace]
+authors = ["Ibrahim Gezer <106686270+Teddy131@users.noreply.github.com>"]
+channels = ["conda-forge"]
+name = "IDA-GROUP"
+platforms = ["win-64", "linux-64", "osx-arm64", "osx-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.12.*"
+ipykernel = ">=7.3.0,<8"
+jupyterlab = ">=4.6.2,<5"
+pandas = ">=3.0.5,<4"
+matplotlib = ">=3.11.1,<4"
+numpy = ">=2.5.1,<3"

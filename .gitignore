@@ -218,4 +218,8 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Datasets
-/datasets/*
+data/*
+
+# pixi environments
+.pixi/*
+!.pixi/config.toml

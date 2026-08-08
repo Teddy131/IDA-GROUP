@@ -13,9 +13,9 @@
 Import following data to the project:
 
 Dataset Folder:
-* datasets/
+* data/
 
-Files in datasets folder:
+Files in "data" folder:
 * Einzelteil/
 * Fahrzeug/
 * Geodaten/
