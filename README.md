@@ -9,3 +9,17 @@
 * Task 5: Cagatay
 
 * Task 6: Erol
+
+Import following data to the project:
+
+Dataset Folder:
+* datasets/
+
+Files in datasets folder:
+* Einzelteil/
+* Fahrzeug/
+* Geodaten/
+* Komponente/
+* Logistikverzug/
+* Zulassungen/
+* Einzelteil_T23.csv
