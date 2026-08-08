@@ -23,3 +23,6 @@ Files in datasets folder:
 * Logistikverzug/
 * Zulassungen/
 * Einzelteil_T23.csv
+
+
+General Tasks until next Meeting on NA
