@@ -17,12 +17,13 @@ html, body, [class*="css"] {
 </style>
 """, unsafe_allow_html=True)
 
-# Loading the final data
+# LOADING DATA AND CACHING
 @st.cache_data
 def load_data():
     df = pd.read_csv("final_data_sample.csv", parse_dates=["production_date"])
     return df
 
+# DATE FILTER
 def filter_data_by_date(df):
     """Filter the data based on the selected date range."""
     min_date = df['production_date'].min().date()
@@ -41,7 +42,7 @@ def filter_data_by_date(df):
     start, end = date_selection
     return df[df['production_date'].dt.date.between(start, end)]
 
-
+# RENDERING FUNCTIONS
 def render_tab_overview(df):
 
     # CALCULATING METRICS
@@ -60,7 +61,6 @@ def render_tab_overview(df):
     col2.metric("Market share (202)", f"{market_share}%")
     col3.metric("Engine penetration", f"{penetration_percentage}%")
     col4.metric("Slogan", f"Every {every_xth}th engine")
-    
     
 def render_tab_market_share(df):
     st.header("Market Share Analysis")
@@ -96,8 +96,7 @@ def render_tab_market_share(df):
         color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
     )
     st.plotly_chart(fig_pie, use_container_width=True)
-    
-    
+        
 def render_tab_engine_penetration(df):
     st.title("Engine Penetration")
     st.caption("Shows the penetration of different engine types.")
