@@ -40,9 +40,39 @@ def filter_data_by_date(df):
     start, end = date_selection
     return df[df['production_date'].dt.date.between(start, end)]
 
+
+def render_tab_overview():
+    st.title("KPI Overview")
+    st.caption("Key figures for marketing: market share, quality, and engine penetration.")
+    st.dataframe(data.head())
+def render_tab_market_share():
+    st.title("Market Share")
+    st.caption("Shows the market share of different brands.")
+    market_share_fig = px.pie(data_frame=data, names='manufacturer', title='Market Share by Brand')
+    st.plotly_chart(market_share_fig)
+def render_tab_engine_penetration():
+    st.title("Engine Penetration")
+    st.caption("Shows the penetration of different engine types.")
+    #engine_penetration_fig = px.histogram(data_frame=data, x='engine_type', title='Engine Penetration')
+    #st.plotly_chart(engine_penetration_fig)
+def render_quality_analysis():
+    st.title("Quality Analysis")
+    st.caption("Shows the quality metrics of the products.")
+def render_tab_data_table():
+    st.title("Data Table")
+    st.caption("Shows the filtered data used for analysis.")
+    st.dataframe(data.head())
+def render_tab_debugging():
+    st.title("Debugging")
+    st.caption("Debugging information for developers.")
+    st.write(data.dtypes)           # Datentypen pruefen
+    st.write(data.head())           # Erste Zeilen ansehen
+    #st.write(type(data["production_date"]))    # Typ einer Variable pruefen
+    st.write(data.shape)            # Anzahl Zeilen/Spalten
+
+
 # Loading the data
 data = load_data()
-
 
 # SIDEBAR
 with st.sidebar:
@@ -53,8 +83,6 @@ with st.sidebar:
     data = filter_data_by_date(data)
 
 
-
-
 # Create tabs for different sections of the dashboard
 tab_overview, tab_market_share, tab_engine_penetration, tab_quality_analysis, tab_data_table, tab_debugging = st.tabs([
     "Overview", "Market share", "Engine penetration", "Quality analysis", "Data table", "Debugging"])
@@ -62,51 +90,26 @@ tab_overview, tab_market_share, tab_engine_penetration, tab_quality_analysis, ta
 
 # OVERVIEW
 with tab_overview:
-    st.title("KPI Overview")
-    st.caption("Key figures for marketing: market share, quality, and engine penetration.")
-    
-    
-    
-    
-    
-    st.dataframe(data.head())
+    render_tab_overview()
 
 # MARKET SHARE
 with tab_market_share:
-    st.title("Market Share")
-    st.caption("Shows the market share of different brands.")
-    market_share_fig = px.pie(data_frame=data, names='manufacturer', title='Market Share by Brand')
-    st.plotly_chart(market_share_fig)
+    render_tab_market_share()
     
 # ENGINE PENETRATION
 with tab_engine_penetration:
-    st.title("Engine Penetration")
-    st.caption("Shows the penetration of different engine types.")
-    #engine_penetration_fig = px.histogram(data_frame=data, x='engine_type', title='Engine Penetration')
-    #st.plotly_chart(engine_penetration_fig)
+    render_tab_engine_penetration()
 
 # QUALITY ANALYSIS
 with tab_quality_analysis:
-    st.title("Quality Analysis")
-    st.caption("Shows the quality metrics of the products.")
+    render_quality_analysis()
     
 # DATA TABLE
 with tab_data_table:
-    st.title("Data Table")
-    st.caption("Shows the filtered data used for analysis.")
-    st.dataframe(data.head())
+    render_tab_data_table()
 
 # DEBUGGING
 with tab_debugging:
-    st.title("Debugging")
-    st.caption("Debugging information for developers.")
-    st.write(data.dtypes)           # Datentypen pruefen
-    st.write(data.head())           # Erste Zeilen ansehen
-    #st.write(type(data["production_date"]))    # Typ einer Variable pruefen
-    st.write(data.shape)            # Anzahl Zeilen/Spalten
-
-
-
-
+    render_tab_debugging()
 
 
