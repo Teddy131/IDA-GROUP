@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
+import io
 
 # Page Config
 st.set_page_config(page_title="202 Marketing Dashboard", layout="wide")
@@ -41,28 +42,58 @@ def filter_data_by_date(df):
     return df[df['production_date'].dt.date.between(start, end)]
 
 
-def render_tab_overview():
-    st.title("KPI Overview")
-    st.caption("Key figures for marketing: market share, quality, and engine penetration.")
-    st.dataframe(data.head())
-def render_tab_market_share():
+def render_tab_overview(df):
+
+    # CALCULATING
+    total_parts = len(df)
+    parts_202 = len(df[df["manufacturer"] == 202])
+    market_share = round(parts_202/total_parts * 100, 2)
+    engines_total = df["engine_id"].nunique()
+    engines_with_202 = df[df["manufacturer"] == 202]["engine_id"].nunique()
+    penetration_percentage = round(engines_with_202 / engines_total * 100, 2)
+    every_xth = round(engines_total / engines_with_202, 2)
+    # Market share % of 202 per part type
+    total_per_part = df.groupby("part_type")["part_id"].count()
+    parts_202_per_part = df[df["manufacturer"] == 202].groupby("part_type")["part_id"].count()
+    market_share_pct = (parts_202_per_part / total_per_part * 100).reset_index(name="market_share_%")
+    
+    # RENDERING
+    st.header("Company 202 -- KPI Overview")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total parts (202)", f"{parts_202:,}")
+    col2.metric("Market share (202)", f"{market_share}%")
+    col3.metric("Engine penetration", f"{penetration_percentage}%")
+    col4.metric("Slogan", f"Every {every_xth}th engine")
+    
+    # Bar plot
+    fig = px.bar(
+        market_share_pct,
+        x="part_type",
+        y="market_share_%",
+        color_discrete_sequence=["#ADD8E6"],
+        title="Market share of 202 parts by part type",
+        labels={"market_share_%": "Market share (%)", "part_type": "Part Type"},
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def render_tab_market_share(df):
     st.title("Market Share")
     st.caption("Shows the market share of different brands.")
     market_share_fig = px.pie(data_frame=data, names='manufacturer', title='Market Share by Brand')
     st.plotly_chart(market_share_fig)
-def render_tab_engine_penetration():
+def render_tab_engine_penetration(df):
     st.title("Engine Penetration")
     st.caption("Shows the penetration of different engine types.")
     #engine_penetration_fig = px.histogram(data_frame=data, x='engine_type', title='Engine Penetration')
     #st.plotly_chart(engine_penetration_fig)
-def render_quality_analysis():
+def render_quality_analysis(df):
     st.title("Quality Analysis")
     st.caption("Shows the quality metrics of the products.")
-def render_tab_data_table():
+def render_tab_data_table(df):
     st.title("Data Table")
     st.caption("Shows the filtered data used for analysis.")
     st.dataframe(data.head())
-def render_tab_debugging():
+def render_tab_debugging(df):
     st.title("Debugging")
     st.caption("Debugging information for developers.")
     st.write(data.dtypes)           # Datentypen pruefen
@@ -90,26 +121,26 @@ tab_overview, tab_market_share, tab_engine_penetration, tab_quality_analysis, ta
 
 # OVERVIEW
 with tab_overview:
-    render_tab_overview()
+    render_tab_overview(data)
 
 # MARKET SHARE
 with tab_market_share:
-    render_tab_market_share()
+    render_tab_market_share(data)
     
 # ENGINE PENETRATION
 with tab_engine_penetration:
-    render_tab_engine_penetration()
+    render_tab_engine_penetration(data)
 
 # QUALITY ANALYSIS
 with tab_quality_analysis:
-    render_quality_analysis()
+    render_quality_analysis(data)
     
 # DATA TABLE
 with tab_data_table:
-    render_tab_data_table()
+    render_tab_data_table(data)
 
 # DEBUGGING
 with tab_debugging:
-    render_tab_debugging()
+    render_tab_debugging(data)
 
 
