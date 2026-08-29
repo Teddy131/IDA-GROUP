@@ -44,7 +44,12 @@ def filter_data_by_date(df):
 
 # RENDERING FUNCTIONS
 def render_tab_overview(df):
+    st.header("Company 202 -- KPI Overview")
 
+    if df.empty:
+        st.info("No data available.")
+        return
+    
     # CALCULATING METRICS
     total_parts = len(df)
     parts_202 = len(df[df["manufacturer"] == 202])
@@ -55,7 +60,6 @@ def render_tab_overview(df):
     every_xth = round(engines_total / engines_with_202, 2)
     
     # RENDERING METRICS
-    st.header("Company 202 -- KPI Overview")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total parts (202)", f"{parts_202:,}")
     col2.metric("Market share (202)", f"{market_share}%")
@@ -65,6 +69,10 @@ def render_tab_overview(df):
 def render_tab_market_share(df):
     st.header("Market Share Analysis")
 
+    if df.empty:
+        st.info("No data available.")
+        return
+    
     # Grouped Bar Chart
     df_copy = df.copy()
     df_copy["group"] = df_copy["manufacturer"].apply(lambda x: "202" if x == 202 else "Competition")
