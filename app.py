@@ -44,7 +44,7 @@ def filter_data_by_date(df):
 
 def render_tab_overview(df):
 
-    # CALCULATING
+    # CALCULATING METRICS
     total_parts = len(df)
     parts_202 = len(df[df["manufacturer"] == 202])
     market_share = round(parts_202/total_parts * 100, 2)
@@ -53,7 +53,7 @@ def render_tab_overview(df):
     penetration_percentage = round(engines_with_202 / engines_total * 100, 2)
     every_xth = round(engines_total / engines_with_202, 2)
     
-    # RENDERING
+    # RENDERING METRICS
     st.header("Company 202 -- KPI Overview")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total parts (202)", f"{parts_202:,}")
@@ -63,47 +63,56 @@ def render_tab_overview(df):
     
     
 def render_tab_market_share(df):
-    if df.empty:
-        st.info("No data available.")
-        return
+    st.header("Market Share Analysis")
+
+    # Grouped Bar Chart
+    df_copy = df.copy()
+    df_copy["group"] = df_copy["manufacturer"].apply(lambda x: "202" if x == 202 else "Competition")
+    market_df = df_copy.groupby(["part_type", "group"]).size().reset_index(name="count")
     
-    # STATS
-    total_per_part = df.groupby("part_type")["part_id"].count()
-    parts_202_per_part = df[df["manufacturer"] == 202].groupby("part_type")["part_id"].count()
-    market_share_pct = (parts_202_per_part / total_per_part * 100).reset_index(name="market_share_%")
+    bar_chart = px.bar(
+        market_df,
+        x="part_type", y="count", color="group",
+        barmode="group",
+        title="Parts Produced: 202 vs. Competition",
+        labels={"count": "Number of Parts", "part_type": "Part Type", "group": "Manufacturer"},
+        color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
+    )
+    st.plotly_chart(bar_chart, use_container_width=True)
+
     
-    
-    # RENDERING
-    st.title("Market Share Analysis")
-    st.caption("202 vs Competition Market Share")
-    
-    # PIE Chart
+    # TOTAL PIE Chart
     market_share_fig = px.pie(data_frame=data, names='manufacturer', title='Market Share by Brand')
     st.plotly_chart(market_share_fig)
     
-    # Bar plot
-    fig = px.bar(
-        market_share_pct,
-        x="part_type",
-        y="market_share_%",
-        color_discrete_sequence=["#ADD8E6"],
-        title="Market share of 202 parts by part type",
-        labels={"market_share_%": "Market share (%)", "part_type": "Part Type"},
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    # Pie Chart
+    selected_part = st.selectbox("Select a part type for detail view", df["part_type"].unique())
+    part_df = df_copy[df_copy["part_type"] == selected_part]
+    pie_df = part_df.groupby("group").size().reset_index(name="count")
 
+    fig_pie = px.pie(
+        pie_df, values="count", names="group",
+        title=f"Market Share for {selected_part}",
+        color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
+    )
+    st.plotly_chart(fig_pie, use_container_width=True)
+    
+    
 def render_tab_engine_penetration(df):
     st.title("Engine Penetration")
     st.caption("Shows the penetration of different engine types.")
     #engine_penetration_fig = px.histogram(data_frame=data, x='engine_type', title='Engine Penetration')
     #st.plotly_chart(engine_penetration_fig)
+    
 def render_quality_analysis(df):
     st.title("Quality Analysis")
     st.caption("Shows the quality metrics of the products.")
+    
 def render_tab_data_table(df):
     st.title("Data Table")
     st.caption("Shows the filtered data used for analysis.")
     st.dataframe(data.head())
+    
 def render_tab_debugging(df):
     st.title("Debugging")
     st.caption("Debugging information for developers.")
