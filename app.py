@@ -21,6 +21,9 @@ html, body, [class*="css"] {
 @st.cache_data
 def load_data():
     df = pd.read_csv("final_data_sample.csv", parse_dates=["production_date"])
+    string_cols = df.select_dtypes(include=["string", "object"]).columns
+    for col in string_cols:
+        df[col] = df[col].astype(object)
     return df
 
 # DATE FILTER
@@ -66,6 +69,8 @@ def render_tab_overview(df):
     col3.metric("Engine penetration", f"{penetration_percentage}%")
     col4.metric("Slogan", f"Every {every_xth}th engine")
     
+    # TODO OEM 1 VOLUME, DEFECT RATE, PART TYPES
+    
 def render_tab_market_share(df):
     st.header("Market Share Analysis")
 
@@ -86,11 +91,11 @@ def render_tab_market_share(df):
         labels={"count": "Number of Parts", "part_type": "Part Type", "group": "Manufacturer"},
         color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
     )
-    st.plotly_chart(bar_chart, use_container_width=True)
+    st.plotly_chart(bar_chart, width="stretch")
 
     
     # TOTAL PIE Chart
-    market_share_fig = px.pie(data_frame=data, names='manufacturer', title='Market Share by Brand')
+    market_share_fig = px.pie(data_frame=df, names='manufacturer', title='Market Share by Brand')
     st.plotly_chart(market_share_fig)
     
     # Pie Chart
@@ -103,34 +108,141 @@ def render_tab_market_share(df):
         title=f"Market Share for {selected_part}",
         color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
     )
-    st.plotly_chart(fig_pie, use_container_width=True)
+    st.plotly_chart(fig_pie, width="stretch")
         
 def render_tab_engine_penetration(df):
-    st.title("Engine Penetration")
-    st.caption("Shows the penetration of different engine types.")
+    st.header("Engine Penetration")
+    
     if df.empty:
             st.info("No data available.")
             return
     
-    #engine_penetration_fig = px.histogram(data_frame=data, x='engine_type', title='Engine Penetration')
-    #st.plotly_chart(engine_penetration_fig)
+    # STATS
+    from_202 = len(df[df["manufacturer"] == 202])
+    total = len(df)
+    total_per_type = df.groupby("engine_type")["engine_id"].nunique()
+    with_202_per_type = df[df["manufacturer"] == 202].groupby("engine_type")["engine_id"].nunique()
+    pen_df = pd.DataFrame({
+        "Total Engines": total_per_type,
+        "Engines with 202": with_202_per_type
+    }).fillna(0)
+    pen_df["Penetration %"] = round(pen_df["Engines with 202"] / pen_df["Total Engines"] * 100, 2)
+    pen_df["Every x-th"] = round(pen_df["Total Engines"] / pen_df["Engines with 202"], 2).replace(float("inf"), 0)
+    pen_df = pen_df.reset_index()
+    pen_df["engine_type"] = pen_df["engine_type"].astype(str)
+    presence = df.groupby(["engine_type", "part_type"]).size().unstack(fill_value=0)
+    presence = (presence > 0).astype(int)
     
-def render_quality_analysis(df):
-    st.title("Quality Analysis")
-    st.caption("Shows the quality metrics of the products.")
+    # SLOGAN
+    total_engines = pen_df["Total Engines"].sum()
+    total_with_202 = pen_df["Engines with 202"].sum()
+    every_x = round(total_engines / total_with_202, 2)
+    st.info(f"In every {every_x}th engine there are parts from 202")
+    
+    # TOTAL PIE CHART
+    fig = px.pie(
+        values=[from_202, total - from_202],
+        names=["202", "Competition"],
+        title="Overall Part Share in All Engines",
+        color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
+    )
+    st.plotly_chart(fig, width="stretch")
+    
+    # HORIZONTAL BAR CHART
+    fig = px.bar(
+        pen_df, y="engine_type", x="Penetration %",
+        orientation="h", title="Share of Engines Containing 202 Parts",
+        color_discrete_sequence=["#ADD8E6"]
+    )
+    st.plotly_chart(fig, width="stretch")
+    
+    # PRESENCE HEATMAP
+    fig_heat = px.imshow(
+        presence, title="Part Presence by Engine Type",
+        labels=dict(x="Part Type", y="Engine Type", color="Present"),
+        color_continuous_scale=["#FFFFFF", "#ADD8E6"]
+    )
+    st.plotly_chart(fig_heat, width="stretch")
+    
+    # TABLE 
+    st.dataframe(pen_df)
+    
+def render_tab_quality_analysis(df):
+    st.title("Quality and Defect Analysis")
+    st.caption("Shows the quality metrics of the products, for OEM1 vehicles only")
+    if df.empty:
+        st.info("No data available.")
+        return
+    
+    # CALCULATING STATS
+    oem1_df = df[df["OEM_type"] == "OEM1"].copy()
+    oem1_df["group"] = oem1_df["manufacturer"].apply(lambda x: "202" if x == 202 else "Competition")
+    defect_stats = oem1_df.groupby(["part_type", "group"]).agg(
+        total=("faulty", "count"),
+        faulty=("faulty", "sum")
+    ).reset_index()
+    defect_stats["defect_rate_%"] = round(defect_stats["faulty"] / defect_stats["total"] * 100, 2)
+    
+    st.write("Debug Table",defect_stats)
+    
+    # GROUPED BARPLOT
+    fig = px.bar(
+        defect_stats,
+        x="part_type", y="defect_rate_%", color="group",
+        barmode="group", title="Defect Rate: 202 vs. Competition (OEM1 Only)",
+        labels={"defect_rate_%": "Defect Rate (%)", "part_type": "Part Type", "group": "Manufacturer"},
+        color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
+    )
+    st.plotly_chart(fig, width="stretch")
+    
+    # LINE CHART (OVER TIME)
+    selected_part = st.selectbox("Select part for trend view", oem1_df["part_type"].unique(), key="quality_part")
+    trend_df = oem1_df[oem1_df["part_type"] == selected_part].copy()
+    trend_df["month"] = trend_df["production_date"].dt.to_period("M").astype(str)
+
+    trend_agg = trend_df.groupby(["month", "group"]).agg(
+        total=("faulty", "count"),
+        faulty=("faulty", "sum")
+    ).reset_index()
+    trend_agg["defect_rate_%"] = round(trend_agg["faulty"] / trend_agg["total"] * 100, 2)
+
+    fig_line = px.line(
+        trend_agg,
+        x="month", y="defect_rate_%", color="group",
+        title=f"Defect Rate Trend for {selected_part} (OEM1)",
+        labels={"defect_rate_%": "Defect Rate (%)", "month": "Month", "group": "Manufacturer"},
+        color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
+    )
+    fig_line.update_xaxes(type="category")
+    st.plotly_chart(fig_line, width="stretch")
     
 def render_tab_data_table(df):
-    st.title("Data Table")
-    st.caption("Shows the filtered data used for analysis.")
-    st.dataframe(data.head())
+    st.header("Final Dataset")
+
+    # SELECTION FILTERS
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        select_parts = st.multiselect("Part type", df["part_type"].unique(), default=df["part_type"].unique())
+    with col2:
+        select_engines = st.multiselect("Engine type", df["engine_type"].unique(), default=df["engine_type"].unique())
+    with col3:
+        select_oem = st.multiselect("OEM", df["OEM_type"].unique(), default=df["OEM_type"].unique())
+
+    table_df = df[
+        (df["part_type"].isin(select_parts)) &
+        (df["engine_type"].isin(select_engines)) &
+        (df["OEM_type"].isin(select_oem))
+    ]
+
+    st.write(f"Showing {len(table_df):,} of {len(df):,} rows")
+    st.dataframe(table_df, width="stretch")
     
 def render_tab_debugging(df):
     st.title("Debugging")
     st.caption("Debugging information for developers.")
-    st.write(data.dtypes)           # Datentypen pruefen
-    st.write(data.head())           # Erste Zeilen ansehen
-    #st.write(type(data["production_date"]))    # Typ einer Variable pruefen
-    st.write(data.shape)            # Anzahl Zeilen/Spalten
+    st.write(df.dtypes.astype(str))
+    st.write(df.head())           # Erste Zeilen ansehen
+    st.write(df.shape)            # Anzahl Zeilen/Spalten
 
 
 # Loading the data
@@ -164,7 +276,7 @@ with tab_engine_penetration:
 
 # QUALITY ANALYSIS
 with tab_quality_analysis:
-    render_quality_analysis(data)
+    render_tab_quality_analysis(data)
     
 # DATA TABLE
 with tab_data_table:
@@ -173,5 +285,3 @@ with tab_data_table:
 # DEBUGGING
 with tab_debugging:
     render_tab_debugging(data)
-
-
