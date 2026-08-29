@@ -108,6 +108,10 @@ def render_tab_market_share(df):
 def render_tab_engine_penetration(df):
     st.title("Engine Penetration")
     st.caption("Shows the penetration of different engine types.")
+    if df.empty:
+            st.info("No data available.")
+            return
+    
     #engine_penetration_fig = px.histogram(data_frame=data, x='engine_type', title='Engine Penetration')
     #st.plotly_chart(engine_penetration_fig)
     
