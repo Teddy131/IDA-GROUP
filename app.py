@@ -61,14 +61,24 @@ def render_tab_overview(df):
     penetration_percentage = round(engines_with_202 / engines_total * 100, 2)
     every_xth = round(engines_total / engines_with_202, 2)
     
-    # RENDERING METRICS
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total parts (202)", f"{parts_202:,}")
-    col2.metric("Market share (202)", f"{market_share}%")
-    col3.metric("Engine penetration", f"{penetration_percentage}%")
-    col4.metric("Slogan", f"Every {every_xth}th engine")
+    oem1_df = df[df["OEM_type"] == "OEM1"]
+    oem1_parts_202 = len(oem1_df[oem1_df["manufacturer"] == 202])
+    oem1_total = len(oem1_df)
+    faulty_202 = df[(df["manufacturer"] == 202) & (df["faulty"] == 1)]
+    defect_rate = round(len(faulty_202) / parts_202 * 100, 2) if parts_202 > 0 else 0
+    part_types_202 = df[df["manufacturer"] == 202]["part_type"].nunique()
     
-    # TODO OEM 1 VOLUME, DEFECT RATE, PART TYPES
+    # RENDERING METRICS
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Market share (202)", f"{market_share}%")
+    col2.metric("Engine penetration", f"{penetration_percentage}%")
+    col3.metric("Slogan", f"In every {every_xth}th engine")
+    
+    col4, col5, col6, col7 = st.columns(4)
+    col4.metric("Total parts (202)", f"{parts_202:,}")
+    col5.metric("Part types (202)", f"{part_types_202}")
+    col6.metric("OEM1 volume (202)", f"{oem1_parts_202:,} / {oem1_total:,}")
+    col7.metric("Defect rate (202)", f"{defect_rate}%")
     
 def render_tab_market_share(df):
     st.header("Market Share Analysis")
