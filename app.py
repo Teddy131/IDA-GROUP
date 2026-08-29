@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import numpy as np
-import io
 
 # Page Config
 st.set_page_config(page_title="202 Marketing Dashboard", layout="wide")
@@ -96,8 +94,13 @@ def render_tab_market_share(df):
 
     
     # TOTAL PIE Chart
-    market_share_fig = px.pie(data_frame=df, names='manufacturer', title='Market Share by Brand')
-    st.plotly_chart(market_share_fig)
+        # TOTAL PIE Chart
+    market_share_fig = px.pie(
+        data_frame=df_copy, names='manufacturer', title='Market Share by Brand',
+        color='manufacturer',
+        color_discrete_map = {202: "#ADD8E6", 201: "#B0C4DE", 203: "#D3D3D3", 204: "#C0C0C0"}
+    )
+    st.plotly_chart(market_share_fig, width="stretch")
     
     # Pie Chart
     selected_part = st.selectbox("Select a part type for detail view", df["part_type"].unique())
@@ -153,7 +156,8 @@ def render_tab_engine_penetration(df):
     fig = px.bar(
         pen_df, y="engine_type", x="Penetration %",
         orientation="h", title="Share of Engines Containing 202 Parts",
-        color_discrete_sequence=["#ADD8E6"]
+        color_discrete_sequence=["#ADD8E6"],
+        labels={"engine_type": "Engine Type"}
     )
     st.plotly_chart(fig, width="stretch")
     
