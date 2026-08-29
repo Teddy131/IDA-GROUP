@@ -21,6 +21,7 @@ html, body, [class*="css"] {
 @st.cache_data
 def load_data():
     df = pd.read_csv("final_data_sample.csv", parse_dates=["production_date"])
+    # Import columns as objects
     string_cols = df.select_dtypes(include=["string", "object"]).columns
     for col in string_cols:
         df[col] = df[col].astype(object)
