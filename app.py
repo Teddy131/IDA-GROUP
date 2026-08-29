@@ -52,10 +52,6 @@ def render_tab_overview(df):
     engines_with_202 = df[df["manufacturer"] == 202]["engine_id"].nunique()
     penetration_percentage = round(engines_with_202 / engines_total * 100, 2)
     every_xth = round(engines_total / engines_with_202, 2)
-    # Market share % of 202 per part type
-    total_per_part = df.groupby("part_type")["part_id"].count()
-    parts_202_per_part = df[df["manufacturer"] == 202].groupby("part_type")["part_id"].count()
-    market_share_pct = (parts_202_per_part / total_per_part * 100).reset_index(name="market_share_%")
     
     # RENDERING
     st.header("Company 202 -- KPI Overview")
@@ -64,6 +60,26 @@ def render_tab_overview(df):
     col2.metric("Market share (202)", f"{market_share}%")
     col3.metric("Engine penetration", f"{penetration_percentage}%")
     col4.metric("Slogan", f"Every {every_xth}th engine")
+    
+    
+def render_tab_market_share(df):
+    if df.empty:
+        st.info("No data available.")
+        return
+    
+    # STATS
+    total_per_part = df.groupby("part_type")["part_id"].count()
+    parts_202_per_part = df[df["manufacturer"] == 202].groupby("part_type")["part_id"].count()
+    market_share_pct = (parts_202_per_part / total_per_part * 100).reset_index(name="market_share_%")
+    
+    
+    # RENDERING
+    st.title("Market Share Analysis")
+    st.caption("202 vs Competition Market Share")
+    
+    # PIE Chart
+    market_share_fig = px.pie(data_frame=data, names='manufacturer', title='Market Share by Brand')
+    st.plotly_chart(market_share_fig)
     
     # Bar plot
     fig = px.bar(
@@ -76,11 +92,6 @@ def render_tab_overview(df):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-def render_tab_market_share(df):
-    st.title("Market Share")
-    st.caption("Shows the market share of different brands.")
-    market_share_fig = px.pie(data_frame=data, names='manufacturer', title='Market Share by Brand')
-    st.plotly_chart(market_share_fig)
 def render_tab_engine_penetration(df):
     st.title("Engine Penetration")
     st.caption("Shows the penetration of different engine types.")
