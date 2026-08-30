@@ -6,6 +6,39 @@ import plotly.express as px
 # Page Config
 st.set_page_config(page_title="202 Marketing Dashboard", layout="wide")
 
+#Colors
+color_202 = "#ADD8E6"
+group_colors = {"202": color_202, "Competition": "#CCCCCC"}
+manufacturer_colors = {202: color_202, 201: "#B0C4DE", 203: "#D3D3D3", 204: "#C0C0C0"}
+single_color = "#ADD8E6"
+
+#Axis Labels
+labels = {
+    "count": "Number of Parts",
+    "part_type": "Part Type",
+    "group": "Manufacturer",
+    "defect_rate_%": "Defect Rate (%)",
+    "engine_type": "Engine Type"
+}
+
+#Plotting Functions
+def plot_bar(df, x, y, title, color = None, colors = group_colors, orientation = "v"):
+    fig = px.bar (
+        df, x = x, y = y, color = color, orientation = orientation, barmode = "group", 
+        title = title, labels = labels, color_discrete_map = colors, color_discrete_sequence = [color_202],
+    )
+    st.plotly_chart(fig, width = "stretch")
+    
+    return fig
+
+def plot_pie(df, names, title, values = None, colors = group_colors):
+    fig = px.pie (
+        df, names = names, values = values, color = names, title = title, color_discrete_map = colors
+    )
+    st.plotly_chart(fig, width = "stretch")
+
+    return fig
+    
 # CSS Injection
 st.markdown("""
 <style>
@@ -92,30 +125,26 @@ def render_tab_market_share(df):
     df_copy = df.copy()
     df_copy["group"] = df_copy["manufacturer"].apply(lambda x: "202" if x == 202 else "Competition")
     market_df = df_copy.groupby(["part_type", "group"]).size().reset_index(name="count")
-    
-    bar_chart = px.bar(
-        market_df,
-        x="part_type", y="count", color="group",
-        barmode="group",
-        title="Parts Produced: 202 vs. Competition",
-        labels={"count": "Number of Parts", "part_type": "Part Type", "group": "Manufacturer"},
-        color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
-    )
-    st.plotly_chart(bar_chart, width="stretch")
 
+    plot_bar(market_df, x = "part_type", y = "count", color = "group", title = "Parts Produced: 202 vs. Competition")
     
     # TOTAL PIE Chart
+<<<<<<< HEAD
     market_share_fig = px.pie(
         data_frame=df_copy, names='manufacturer', title='Market Share by Brand',
         color='manufacturer',
         color_discrete_map = {202: "#ADD8E6", 201: "#B0C4DE", 203: "#D3D3D3", 204: "#C0C0C0"}
     )
     st.plotly_chart(market_share_fig, width="stretch")
+=======
+    plot_pie(df_copy, names = "manufacturer", title = "Market Share by Brand", colors = manufacturer_colors)
+>>>>>>> 6ee28d7995b8564610189cefdeb53d2ac1790816
     
     # Pie Chart
     selected_part = st.selectbox("Select a part type for detail view", df["part_type"].unique())
     part_df = df_copy[df_copy["part_type"] == selected_part]
     pie_df = part_df.groupby("group").size().reset_index(name="count")
+<<<<<<< HEAD
 
     fig_pie = px.pie(
         pie_df, values="count", names="group",
@@ -124,6 +153,11 @@ def render_tab_market_share(df):
     )
     st.plotly_chart(fig_pie, width="stretch")
     
+=======
+    
+    plot_pie(pie_df, names = "group", values = "count", title = f"Market Share for {selected_part}", colors = group_colors)
+        
+>>>>>>> 6ee28d7995b8564610189cefdeb53d2ac1790816
 def render_tab_engine_penetration(df):
     st.header("Engine Penetration")
     
@@ -154,22 +188,16 @@ def render_tab_engine_penetration(df):
     st.info(f"In every {every_x}th engine there are parts from 202")
     
     # TOTAL PIE CHART
-    fig = px.pie(
-        values=[from_202, total - from_202],
-        names=["202", "Competition"],
-        title="Overall Part Share in All Engines",
-        color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
-    )
-    st.plotly_chart(fig, width="stretch")
+    share_df = pd.DataFrame({
+        "group": ["202", "Competition"],
+        "count": [from_202, total - from_202]
+    })
+    
+    plot_pie(share_df, names = "group", values = "count", title = "Overall Part Share in All Engines")
+    
     
     # HORIZONTAL BAR CHART
-    fig = px.bar(
-        pen_df, y="engine_type", x="Penetration %",
-        orientation="h", title="Share of Engines Containing 202 Parts",
-        color_discrete_sequence=["#ADD8E6"],
-        labels={"engine_type": "Engine Type"}
-    )
-    st.plotly_chart(fig, width="stretch")
+    plot_bar(pen_df, x = "Penetration %", y = "engine_type", orientation = "h", title = "Share of Engines Containing 202 Parts")
     
     # PRESENCE HEATMAP
     fig_heat = px.imshow(
@@ -201,14 +229,7 @@ def render_tab_quality_analysis(df):
     st.write("Debug Table",defect_stats)
     
     # GROUPED BARPLOT
-    fig = px.bar(
-        defect_stats,
-        x="part_type", y="defect_rate_%", color="group",
-        barmode="group", title="Defect Rate: 202 vs. Competition (OEM1 Only)",
-        labels={"defect_rate_%": "Defect Rate (%)", "part_type": "Part Type", "group": "Manufacturer"},
-        color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
-    )
-    st.plotly_chart(fig, width="stretch")
+    plot_bar(defect_stats, x = "part_type", y = "defect_rate_%", color = "group", title = "Defect Rate: 202 vs. Competition (OEM1 Only)")
     
     # LINE CHART (OVER TIME)
     selected_part = st.selectbox("Select part for trend view", oem1_df["part_type"].unique(), key="quality_part")
