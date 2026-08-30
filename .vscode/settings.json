@@ -1,4 +1,8 @@
 {
   "python.defaultInterpreterPath": "${workspaceFolder}\\.pixi\\envs\\default\\python.exe",
-  "files.watcherExclude": { "**/.pixi/**": true }
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/.pixi/envs/default/Lib/site-packages"
+  ],
+  "files.watcherExclude": { "**/.pixi/**": true },
+  "python.analysis.logLevel": "Trace"
 }
