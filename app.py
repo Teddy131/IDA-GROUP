@@ -95,7 +95,7 @@ def render_tab_overview(df):
     penetration_percentage = round(engines_with_202 / engines_total * 100, 2)
     every_xth = round(engines_total / engines_with_202, 2)
     
-    oem1_df = df[df["OEM_type"] == "1"] # TODO
+    oem1_df = df[df["OEM_type"] == 1] # TODO
     oem1_parts_202 = len(oem1_df[oem1_df["manufacturer"] == 202])
     oem1_total = len(oem1_df)
     faulty_202 = df[(df["manufacturer"] == 202) & (df["faulty"] == 1)]
@@ -198,7 +198,7 @@ def render_tab_quality_analysis(df):
         return
     
     # CALCULATING STATS
-    oem1_df = df[df["OEM_type"] == "1"].copy()
+    oem1_df = df[df["OEM_type"] == 1].copy()
     oem1_df["group"] = oem1_df["manufacturer"].apply(lambda x: "202" if x == 202 else "Competition")
     defect_stats = oem1_df.groupby(["part_type", "group"]).agg(
         total=("faulty", "count"),
