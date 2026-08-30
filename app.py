@@ -52,7 +52,17 @@ html, body, [class*="css"] {
 # LOADING DATA AND CACHING
 @st.cache_data
 def load_data():
-    df = pd.read_parquet("additional_files/final_data_group_14.parquet")
+    csv = False
+    
+    # To swap from csv to parquet import
+    if csv == True:
+        df = pd.read_csv("www/final_data.csv", parse_dates=["production_date"])
+        string_cols = df.select_dtypes(include=["string", "object"]).columns
+        for col in string_cols:
+            df[col] = df[col].astype(object)
+    else:
+        df = pd.read_parquet("additional_files/final_data_group_14.parquet")
+        
     return df
 
 # DATE FILTER
