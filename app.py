@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+# TODO BARPLOT AND PIEPLOT AS FUNCTIONS
 
 # Page Config
 st.set_page_config(page_title="202 Marketing Dashboard", layout="wide")
@@ -61,7 +62,7 @@ def render_tab_overview(df):
     penetration_percentage = round(engines_with_202 / engines_total * 100, 2)
     every_xth = round(engines_total / engines_with_202, 2)
     
-    oem1_df = df[df["OEM_type"] == "OEM1"]
+    oem1_df = df[df["OEM_type"] == "OEM1"] # TODO
     oem1_parts_202 = len(oem1_df[oem1_df["manufacturer"] == 202])
     oem1_total = len(oem1_df)
     faulty_202 = df[(df["manufacturer"] == 202) & (df["faulty"] == 1)]
@@ -104,7 +105,6 @@ def render_tab_market_share(df):
 
     
     # TOTAL PIE Chart
-        # TOTAL PIE Chart
     market_share_fig = px.pie(
         data_frame=df_copy, names='manufacturer', title='Market Share by Brand',
         color='manufacturer',
@@ -123,7 +123,7 @@ def render_tab_market_share(df):
         color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
     )
     st.plotly_chart(fig_pie, width="stretch")
-        
+    
 def render_tab_engine_penetration(df):
     st.header("Engine Penetration")
     
@@ -179,7 +179,7 @@ def render_tab_engine_penetration(df):
     )
     st.plotly_chart(fig_heat, width="stretch")
     
-    # TABLE 
+    # TABLE
     st.dataframe(pen_df)
     
 def render_tab_quality_analysis(df):
@@ -260,43 +260,45 @@ def render_tab_debugging(df):
     st.write(df.shape)            # Anzahl Zeilen/Spalten
 
 
-# Loading the data
-data = load_data()
+if __name__ == "__main__":
 
-# SIDEBAR
-with st.sidebar:
-    st.image("www/logo.png")
-    st.title("Production Data Dashboard")
-    st.write("Marketing Analysis in our 202 company")
-    # Filter data by date range
-    data = filter_data_by_date(data)
+    # Loading the data
+    data = load_data()
 
-
-# Create tabs for different sections of the dashboard
-tab_overview, tab_market_share, tab_engine_penetration, tab_quality_analysis, tab_data_table, tab_debugging = st.tabs([
-    "Overview", "Market share", "Engine penetration", "Quality analysis", "Data table", "Debugging"])
+    # SIDEBAR
+    with st.sidebar:
+        st.image("www/logo.png")
+        st.title("Production Data Dashboard")
+        st.write("Marketing Analysis in our 202 company")
+        # Filter data by date range
+        data = filter_data_by_date(data)
 
 
-# OVERVIEW
-with tab_overview:
-    render_tab_overview(data)
+    # Create tabs for different sections of the dashboard
+    tab_overview, tab_market_share, tab_engine_penetration, tab_quality_analysis, tab_data_table, tab_debugging = st.tabs([
+        "Overview", "Market share", "Engine penetration", "Quality analysis", "Data table", "Debugging"])
 
-# MARKET SHARE
-with tab_market_share:
-    render_tab_market_share(data)
-    
-# ENGINE PENETRATION
-with tab_engine_penetration:
-    render_tab_engine_penetration(data)
 
-# QUALITY ANALYSIS
-with tab_quality_analysis:
-    render_tab_quality_analysis(data)
-    
-# DATA TABLE
-with tab_data_table:
-    render_tab_data_table(data)
+    # OVERVIEW
+    with tab_overview:
+        render_tab_overview(data)
 
-# DEBUGGING
-with tab_debugging:
-    render_tab_debugging(data)
+    # MARKET SHARE
+    with tab_market_share:
+        render_tab_market_share(data)
+        
+    # ENGINE PENETRATION
+    with tab_engine_penetration:
+        render_tab_engine_penetration(data)
+
+    # QUALITY ANALYSIS
+    with tab_quality_analysis:
+        render_tab_quality_analysis(data)
+        
+    # DATA TABLE
+    with tab_data_table:
+        render_tab_data_table(data)
+
+    # DEBUGGING
+    with tab_debugging:
+        render_tab_debugging(data)
