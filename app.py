@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-# TODO BARPLOT AND PIEPLOT AS FUNCTIONS
+# TODO BARPLOT AND PIEPLOT AS FUNCTIONS, MAYBE
 
 # Page Config
 st.set_page_config(page_title="202 Marketing Dashboard", layout="wide")
@@ -19,7 +19,7 @@ html, body, [class*="css"] {
 # LOADING DATA AND CACHING
 @st.cache_data
 def load_data():
-    df = pd.read_csv("final_data_sample.csv", parse_dates=["production_date"])
+    df = pd.read_csv("www/final_data.csv", parse_dates=["production_date"])
     # Import columns as objects
     string_cols = df.select_dtypes(include=["string", "object"]).columns
     for col in string_cols:
@@ -62,7 +62,7 @@ def render_tab_overview(df):
     penetration_percentage = round(engines_with_202 / engines_total * 100, 2)
     every_xth = round(engines_total / engines_with_202, 2)
     
-    oem1_df = df[df["OEM_type"] == "OEM1"] # TODO
+    oem1_df = df[df["OEM_type"] == "1"] # TODO
     oem1_parts_202 = len(oem1_df[oem1_df["manufacturer"] == 202])
     oem1_total = len(oem1_df)
     faulty_202 = df[(df["manufacturer"] == 202) & (df["faulty"] == 1)]
@@ -190,7 +190,7 @@ def render_tab_quality_analysis(df):
         return
     
     # CALCULATING STATS
-    oem1_df = df[df["OEM_type"] == "OEM1"].copy()
+    oem1_df = df[df["OEM_type"] == "1"].copy()
     oem1_df["group"] = oem1_df["manufacturer"].apply(lambda x: "202" if x == 202 else "Competition")
     defect_stats = oem1_df.groupby(["part_type", "group"]).agg(
         total=("faulty", "count"),

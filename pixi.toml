@@ -2,7 +2,7 @@
 authors = ["Ibrahim Gezer <106686270+Teddy131@users.noreply.github.com>"]
 channels = ["conda-forge"]
 name = "IDA-GROUP"
-platforms = ["win-64", "linux-64", "osx-arm64", "osx-64"]
+platforms = ["win-64"]
 version = "0.1.0"
 
 [tasks]
@@ -18,3 +18,4 @@ plotly = ">=6.9.0,<7"
 scipy = ">=1.18.0,<2"
 scikit-learn = ">=1.9.0,<2"
 streamlit = ">=1.62.0,<2"
+clevercsv = ">=0.8.5,<0.9"
