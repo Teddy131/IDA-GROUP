@@ -1,5 +1,5 @@
 # Ignore final dataset
-www/final_data.csv/
+www/final_data.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
