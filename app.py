@@ -129,35 +129,15 @@ def render_tab_market_share(df):
     plot_bar(market_df, x = "part_type", y = "count", color = "group", title = "Parts Produced: 202 vs. Competition")
     
     # TOTAL PIE Chart
-<<<<<<< HEAD
-    market_share_fig = px.pie(
-        data_frame=df_copy, names='manufacturer', title='Market Share by Brand',
-        color='manufacturer',
-        color_discrete_map = {202: "#ADD8E6", 201: "#B0C4DE", 203: "#D3D3D3", 204: "#C0C0C0"}
-    )
-    st.plotly_chart(market_share_fig, width="stretch")
-=======
     plot_pie(df_copy, names = "manufacturer", title = "Market Share by Brand", colors = manufacturer_colors)
->>>>>>> 6ee28d7995b8564610189cefdeb53d2ac1790816
     
     # Pie Chart
     selected_part = st.selectbox("Select a part type for detail view", df["part_type"].unique())
     part_df = df_copy[df_copy["part_type"] == selected_part]
     pie_df = part_df.groupby("group").size().reset_index(name="count")
-<<<<<<< HEAD
-
-    fig_pie = px.pie(
-        pie_df, values="count", names="group",
-        title=f"Market Share for {selected_part}",
-        color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
-    )
-    st.plotly_chart(fig_pie, width="stretch")
-    
-=======
     
     plot_pie(pie_df, names = "group", values = "count", title = f"Market Share for {selected_part}", colors = group_colors)
         
->>>>>>> 6ee28d7995b8564610189cefdeb53d2ac1790816
 def render_tab_engine_penetration(df):
     st.header("Engine Penetration")
     
