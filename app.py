@@ -56,7 +56,7 @@ def load_data():
     
     # To swap from csv to parquet import
     if csv == True:
-        df = pd.read_csv("www/final_data.csv", parse_dates=["production_date"])
+        df = pd.read_csv("additional_files/final_data_group_14.csv", parse_dates=["production_date"])
         string_cols = df.select_dtypes(include=["string", "object"]).columns
         for col in string_cols:
             df[col] = df[col].astype(object)

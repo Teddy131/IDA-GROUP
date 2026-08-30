@@ -1,5 +1,5 @@
 # Ignore final dataset
-www/final_data.csv
+additional_files/final_data_group_14.csv
 additional_files/final_data_group_14.parquet
 
 # Byte-compiled / optimized / DLL files
