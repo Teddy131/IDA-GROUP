@@ -1,565 +1,529 @@
-"""
-SoSe26 Case Study 14 - Web Application
-Company "202" | Market Share, Defect Rate & Engine Penetration Dashboard
-
-This app reuses the EXACT data-loading and analysis logic already written in
-Case_Study_14.ipynb
-No synthetic / placeholder data is used. If a data file is missing, the affected
-section shows a clear warning.
-
-HOW TO RUN:
-    streamlit run SoSe26_Case_Study_App_Group_14.py
-
-EXPECTED FOLDER STRUCTURE:
-    ./data/Einzelteil/Einzelteil_T01.txt ... T05.csv
-    ./data/Komponente/Bestandteile_Komponente_K1BE1.csv (K1DI1, K1BE2, K1DI2)
-    ./data/Fahrzeug/Bestandteile_Fahrzeuge_OEM1_Typ11.csv (Typ12)
-    ./www/logo.png                         
-
-STATUS / WHAT'S COVERED (see chat for full breakdown):
-    - Part import (T01-T05), component + OEM1 import: from notebook 1.1-1.3
-    - In_OEM1 flagging: from notebook 1.4
-    - Market share + defect stats (Total AND OEM1-only): from notebook get_einzelteile_stats
-    - Engine penetration ("every x-th engine ..."): from notebook 3.3 / 3.4
-    - NEW in this app (not yet in the notebook): a production-date range filter
-      for the Einzelteile pages, and Plotly visualizations for every section.
-    - NOT yet possible: a single merged "final dataset" (Step 2 of the case study
-      is not finished by the team yet), so this app still works off the same
-      intermediate dataframes the notebook produces.
-"""
-
-import io
-import pickle
-from pathlib import Path
-
-import numpy as np
+import streamlit as st
 import pandas as pd
 import plotly.express as px
-import streamlit as st
+import numpy as np
 
-# --------------------------------------------------------------------------------
-# 0. CONFIG
-# --------------------------------------------------------------------------------
-DATA = Path("data")
-CACHE = Path("cache")
-LOGO_PATH = Path("www") / "logo.png"
+# Page Config
+st.set_page_config(page_title="202 Marketing Dashboard", layout="wide")
 
-PRIMARY_COLOR = "#ADD8E6"   # light blue (required brand color)
-ACCENT_COLOR = "#2C6E82"    # darker blue for chart/text contrast
-FONT_NAME = "Source Sans Pro"
+# Colors
+color_202 = "#ADD8E6"
+group_colors = {"202": color_202, "Competition": "#CCCCCC"}
+manufacturer_colors = {202: color_202, 201: "#B0C4DE", 203: "#D3D3D3", 204: "#C0C0C0"}
 
-PART_NAMES = ["T01", "T02", "T03", "T04", "T05"]
-ENGINE_NAMES = ["K1BE1", "K1DI1", "K1BE2", "K1DI2"]
-
-FILES = {
-    "t01": ("Einzelteil_T01.txt", b" | | ", b" "),
-    "t02": ("Einzelteil_T02.txt", b"  ", b"\t"),
-    "t03": ("Einzelteil_T03.txt", b"|", b"\x0b"),
-    "t04": ("Einzelteil_T04.csv", b";", b"\n"),
-    "t05": ("Einzelteil_T05.csv", b",", b"\n"),
+# Axis Labels
+labels = {
+    "count": "Number of Parts",
+    "part_type": "Part Type",
+    "group": "Manufacturer",
+    "defect_rate_%": "Defect Rate (%)",
+    "engine_type": "Engine Type"
 }
 
-ENGINE_FILE_PATHS = [
-    DATA / "Komponente" / "Bestandteile_Komponente_K1BE1.csv",
-    DATA / "Komponente" / "Bestandteile_Komponente_K1DI1.csv",
-    DATA / "Komponente" / "Bestandteile_Komponente_K1BE2.csv",
-    DATA / "Komponente" / "Bestandteile_Komponente_K1DI2.csv",
-]
-OEM1_FILE_PATHS = [
-    DATA / "Fahrzeug" / "Bestandteile_Fahrzeuge_OEM1_Typ11.csv",
-    DATA / "Fahrzeug" / "Bestandteile_Fahrzeuge_OEM1_Typ12.csv",
-]
-
-st.set_page_config(
-    page_title="Company 202 | Market & Quality Dashboard",
-    page_icon="🔧",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# Plotting Functions
+def plot_bar(df, x, y, title, color=None, colors=group_colors, orientation="v"):
+    fig = px.bar(
+        df, x=x, y=y, color=color, orientation=orientation, barmode="group",
+        title=title, labels=labels, color_discrete_map=colors,
+        color_discrete_sequence=[color_202],
+    )
+    st.plotly_chart(fig, width="stretch")
+    return fig
 
 
-# --------------------------------------------------------------------------------
-# 1. STYLING (light blue theme + Source Sans Pro, explicit text color so it also
-#    works correctly if the browser/Streamlit is set to dark mode)
-# --------------------------------------------------------------------------------
-def inject_custom_css() -> None:
-    st.markdown(
-        f"""
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap');
+def plot_pie(df, names, title, values=None, colors=group_colors):
+    fig = px.pie(
+        df, names=names, values=values, color=names, title=title,
+        color_discrete_map=colors,
+    )
+    st.plotly_chart(fig, width="stretch")
+    return fig
+    
+# CSS Injection
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap');
+html, body, [class*="css"] {
+    font-family: 'Source Sans Pro', sans-serif;
+}
+</style>
+""", unsafe_allow_html=True)
 
-        html, body, [class*="css"] {{
-            font-family: '{FONT_NAME}', sans-serif;
-            color: #1A1A1A;
-        }}
-        .stApp {{ background-color: #F7FBFD; }}
-        section[data-testid="stSidebar"] {{ background-color: {PRIMARY_COLOR}; }}
-        div[data-testid="stMetric"] {{
-            background-color: white;
-            border: 1px solid {PRIMARY_COLOR};
-            border-radius: 10px;
-            padding: 12px;
-        }}
-        h1, h2, h3 {{ color: {ACCENT_COLOR}; }}
-        </style>
-        """,
-        unsafe_allow_html=True,
+# LOADING DATA AND CACHING
+@st.cache_data
+def load_data():
+    # Parquet is loading 10x-15x faster during the intial import
+    df = pd.read_parquet("additional_files/final_data_group_14.parquet")
+    return df
+
+# DATE FILTER
+def filter_data_by_date(df):
+    """Filter the data based on the selected date range."""
+    min_date = df['production_date'].min().date()
+    max_date = df['production_date'].max().date()
+
+    date_selection = st.date_input(
+        "Select the production date range",
+        value=(min_date, max_date),
+        # min max cap
+        min_value=min_date,
+        max_value=max_date,
     )
 
+    # To avoid continuing the calculation without having 2 dates selected
+    if len(date_selection) != 2:
+        st.stop()
 
-# --------------------------------------------------------------------------------
-# 2. DATA LOADING  (ported 1:1 from Case_Study_14.ipynb, wrapped for safety)
-# --------------------------------------------------------------------------------
-def load_einzelteil(key: str) -> pd.DataFrame:
-    """Exact port of the notebook's `load()` helper for one T0x part file."""
-    filename, field_sep, row_sep = FILES[key]
-    raw = (
-        (DATA / "Einzelteil" / filename)
-        .read_bytes()
-        .replace(field_sep, b"\x01")
-        .replace(row_sep, b"\n")
-    )
-    df = pd.read_csv(io.BytesIO(raw), sep="\x01", na_values=["NA"], dtype=str)
+    start, end = date_selection
+    return df[df['production_date'].dt.date.between(start, end)]
 
-    for col in set(c.removesuffix(".x").removesuffix(".y") for c in df.columns):
-        if col + ".x" in df.columns and col + ".y" in df.columns:
-            df[col] = df[col + ".x"].combine_first(df[col + ".y"])
-
-    part = key.upper()
-    df["Part_ID"] = df.get(f"ID_{part}", df.get("Part_ID"))
-
-    if "Produktionsdatum" not in df.columns and "Produktionsdatum_Origin_01011970" in df.columns:
-        df["Produktionsdatum"] = pd.to_datetime("1970-01-01") + pd.to_timedelta(
-            df["Produktionsdatum_Origin_01011970"].astype(float), unit="D"
-        )
-
-    df["Produktionsdatum"] = pd.to_datetime(df["Produktionsdatum"])
-    df["Fehlerhaft_Datum"] = pd.to_datetime(df["Fehlerhaft_Datum"])
-    df["Fehlerhaft_Fahrleistung"] = (
-        df["Fehlerhaft_Fahrleistung"].str.replace(",", ".", regex=False).astype(float)
+# CALCULATING FUNCTIONS (and caching them)
+@st.cache_data
+def calc_overview_metrics(df):
+    total_parts = len(df)
+    parts_202 = len(df[df["manufacturer"] == 202])
+    market_share = round(parts_202 / total_parts * 100, 2)
+    engines_total = df["engine_id"].nunique()
+    engines_with_202 = df[df["manufacturer"] == 202]["engine_id"].nunique()
+    penetration_percentage = round(engines_with_202 / engines_total * 100, 2)
+    every_xth = round(engines_total / engines_with_202, 2)
+    oem1_df = df[df["OEM_type"] == 1]
+    oem1_parts_202 = len(oem1_df[oem1_df["manufacturer"] == 202])
+    oem1_total = len(oem1_df)
+    faulty_202 = df[(df["manufacturer"] == 202) & (df["faulty"] == 1)]
+    defect_rate = round(len(faulty_202) / parts_202 * 100, 2) if parts_202 > 0 else 0
+    part_types_202 = df[df["manufacturer"] == 202]["part_type"].nunique()
+    return (
+        market_share, penetration_percentage, every_xth,
+        parts_202, part_types_202,
+        oem1_parts_202, oem1_total, defect_rate
     )
 
-    int_cols = ["Herstellernummer", "Werksnummer", "Fehlerhaft"]
-    df[int_cols] = df[int_cols].astype("Int64")
+@st.cache_data
+def calc_market_share(df):
+    group = np.where(df["manufacturer"] == 202, "202", "Competition")
+    market_df = df.assign(group=group).groupby(["part_type", "group"]).size().reset_index(name="count")
+    manufacturer_df = df.groupby("manufacturer").size().reset_index(name="count")
+    return market_df, manufacturer_df
 
-    columns = [
-        "Part_ID",
-        "Herstellernummer",
-        "Werksnummer",
-        "Produktionsdatum",
-        "Fehlerhaft",
-        "Fehlerhaft_Datum",
-        "Fehlerhaft_Fahrleistung",
-    ]
-    return df[columns].reset_index(drop=True)
+@st.cache_data
+def calc_engine_penetration(df):
+    from_202 = len(df[df["manufacturer"] == 202])
+    total = len(df)
+    total_per_type = df.groupby("engine_type")["engine_id"].nunique()
+    with_202_per_type = df[df["manufacturer"] == 202].groupby("engine_type")["engine_id"].nunique()
+    pen_df = pd.DataFrame({
+        "Total Engines": total_per_type,
+        "Engines with 202": with_202_per_type
+    }).fillna(0)
+    pen_df["Penetration %"] = round(pen_df["Engines with 202"] / pen_df["Total Engines"] * 100, 2)
+    pen_df["Every x-th"] = round(pen_df["Total Engines"] / pen_df["Engines with 202"], 2).replace(float("inf"), 0)
+    pen_df = pen_df.reset_index()
+    pen_df["engine_type"] = pen_df["engine_type"].astype(str)
+    presence = df.groupby(["engine_type", "part_type"]).size().unstack(fill_value=0)
+    presence = (presence > 0).astype(int)
+    return from_202, total, pen_df, presence
 
-
-@st.cache_resource
-def load_all_einzelteile() -> tuple[dict, list]:
-    # cache_resource (not cache_data): returns the SAME object every time instead
-    # of a deep copy, which matters a lot for GB-scale dataframes. Since nothing
-    # downstream mutates these frames in place (filtering creates new frames),
-    # sharing the reference across reruns/pages is safe and much faster.
-    cache_path = CACHE / "einzelteile.pkl"
-    if cache_path.exists():
-        with open(cache_path, "rb") as f:
-            return pickle.load(f), []
-
-    st.warning(
-        "No cache found under ./cache/einzelteile.pkl — loading raw files directly. "
-        "This can take a long time for large files. Run `python prepare_cache.py` once "
-        "to speed this up on future runs.",
-        icon="⏳",
-    )
-    dfs, errors = {}, []
-    for key in FILES:
-        try:
-            dfs[key] = load_einzelteil(key)
-        except Exception as exc:  # missing file / malformed data
-            errors.append(f"{key.upper()}: {exc}")
-    return dfs, errors
+@st.cache_data
+def calc_quality_stats(df):
+    oem1_df = df[df["OEM_type"] == 1].copy()
+    oem1_df["group"] = np.where(oem1_df["manufacturer"] == 202, "202", "Competition")
+    defect_stats = oem1_df.groupby(["part_type", "group"]).agg(
+        total=("faulty", "count"),
+        faulty=("faulty", "sum")
+    ).reset_index()
+    defect_stats["defect_rate_%"] = round(defect_stats["faulty"] / defect_stats["total"] * 100, 2)
+    return oem1_df, defect_stats
 
 
-@st.cache_resource
-def load_engine_and_oem() -> tuple[list, "pd.DataFrame | None", list]:
-    # cache_resource for the same reason as above.
-    cache_path = CACHE / "engine_dfs.pkl"
-    if cache_path.exists():
-        with open(cache_path, "rb") as f:
-            engine_dfs = pickle.load(f)
-        return engine_dfs, "cached", []  # sentinel: flags already applied
+# RENDERING FUNCTIONS
+def render_tab_overview(df):
+    st.header("KPI Overview")
 
-    engine_dfs, errors = [], []
-    for path in ENGINE_FILE_PATHS:
-        try:
-            df = pd.read_csv(path, sep=";").drop(columns=["Unnamed: 0"], errors="ignore")
-            engine_dfs.append(df)
-        except Exception as exc:
-            errors.append(f"{path.name}: {exc}")
-
-    oem_combined = None
-    try:
-        oem_parts = []
-        for path in OEM1_FILE_PATHS:
-            oem_parts.append(
-                pd.read_csv(path, sep=";").drop(columns=["Unnamed: 0"], errors="ignore")
-            )
-        oem_combined = pd.concat(oem_parts, ignore_index=True)
-    except Exception as exc:
-        errors.append(f"OEM1 vehicle files: {exc}")
-
-    return engine_dfs, oem_combined, errors
-
-
-def add_oem1_flags(engine_dfs: list, oem_combined, einzelteile: dict) -> set:
-    """Ported from notebook 1.4. Mutates engine_dfs / einzelteile in place, returns oem1_part_ids.
-
-    Skipped entirely when data came from the cache (prepare_cache.py already
-    applied these flags before pickling).
-    """
-    #if oem_combined == "cached":
-        #return set()
-    if oem_combined is None or not engine_dfs:
-        return set()
-
-    oem_motor_ids = oem_combined["ID_Motor"]
-    for df in engine_dfs:
-        id_col = df.columns[4]
-        df["In_OEM1"] = df[id_col].isin(oem_motor_ids).astype(int)
-
-    oem1_part_ids = set()
-    for df in engine_dfs:
-        oem1_components = df[df["In_OEM1"] == 1]
-        part_cols = [c for c in df.columns if c.startswith("ID_T")]
-        for col in part_cols:
-            oem1_part_ids.update(oem1_components[col].dropna())
-
-    for t_df in einzelteile.values():
-        t_df["In_OEM1"] = t_df["Part_ID"].isin(oem1_part_ids).astype(int)
-
-    return oem1_part_ids
-
-
-# --------------------------------------------------------------------------------
-# 3. ANALYSIS  (ported from notebook 1.3 "get_einzelteile_stats" and 3.3/3.4)
-# --------------------------------------------------------------------------------
-def get_einzelteile_stats(data_list: list, names: list, oem1_only: bool = False) -> pd.DataFrame:
-    if oem1_only:
-        data_list = [df[df["In_OEM1"] == 1] for df in data_list]
-
-    stats = []
-    for name, df in zip(names, data_list):
-        total_ids = df["Part_ID"].nunique()
-        df_202 = df[df["Herstellernummer"] == 202]
-        df_comp = df[df["Herstellernummer"] != 202]
-
-        ids_202 = df_202["Part_ID"].nunique()
-        ids_comp = total_ids - ids_202
-
-        faulty_202 = df_202[df_202["Fehlerhaft"] == 1]["Part_ID"].nunique()
-        faulty_comp = df_comp[df_comp["Fehlerhaft"] == 1]["Part_ID"].nunique()
-
-        share_202 = round((ids_202 / total_ids * 100), 2) if total_ids else 0.0
-        fail_rate_202 = round((faulty_202 / ids_202 * 100), 2) if ids_202 else 0.0
-        fail_rate_comp = round((faulty_comp / ids_comp * 100), 2) if ids_comp else 0.0
-
-        stats.append(
-            {
-                "Part_Type": name,
-                "total_unique_part_id": total_ids,
-                "unique_part_id_202": ids_202,
-                "unique_part_id_competition": ids_comp,
-                "relative_part_id_202_%": share_202,
-                "faulty_unique_part_id_202": faulty_202,
-                "faulty_unique_part_id_competition": faulty_comp,
-                "relative_faulty_unique_part_id_202_%": fail_rate_202,
-                "relative_faulty_unique_part_id_competition_%": fail_rate_comp,
-            }
-        )
-    return pd.DataFrame(stats)
-
-
-def filter_mask(df: pd.DataFrame) -> pd.Series:
-    mask = pd.Series(False, index=df.index)
-    for col in df.columns[0:4]:
-        mask = mask | df[col].astype(str).str.contains(r"-202-", na=False)
-    return mask
-
-
-def compute_engine_penetration(engine_dfs: list) -> tuple[list, list, float, float]:
-    filtered_engine_dfs = [df[filter_mask(df)] for df in engine_dfs]
-    percentages = [
-        round(len(filtered_engine_dfs[i]) / len(engine_dfs[i]) * 100, 2) if len(engine_dfs[i]) else np.nan
-        for i in range(len(engine_dfs))
-    ]
-    total_with_202 = sum(len(df) for df in filtered_engine_dfs)
-    total_all = sum(len(df) for df in engine_dfs)
-    overall_pct = round(total_with_202 / total_all * 100, 2) if total_all else 0.0
-    overall_ratio = round(100 / overall_pct, 2) if overall_pct else float("inf")
-    return filtered_engine_dfs, percentages, overall_pct, overall_ratio
-
-
-# --------------------------------------------------------------------------------
-# 4. SIDEBAR
-# --------------------------------------------------------------------------------
-def render_sidebar(einzelteile: dict) -> dict:
-    if LOGO_PATH.exists():
-        st.sidebar.image(str(LOGO_PATH), width='stretch')
-    st.sidebar.title("Filters")
-
-    date_range = None
-    if einzelteile:
-        all_dates = pd.concat([df["Produktionsdatum"] for df in einzelteile.values()])
-        min_date, max_date = all_dates.min(), all_dates.max()
-        date_range = st.sidebar.date_input(
-            "Production date range (Einzelteile)",
-            value=(min_date, max_date),
-            min_value=min_date,
-            max_value=max_date,
-        )
-    else:
-        st.sidebar.info("Part data not loaded yet — date filter unavailable.")
-
-    oem1_only = st.sidebar.checkbox("Restrict Market Share / Defect view to OEM1", value=False)
-    return {"date_range": date_range, "oem1_only": oem1_only}
-
-
-def apply_date_filter(einzelteile: dict, date_range) -> dict:
-    if not date_range or len(date_range) != 2:
-        return einzelteile
-    start, end = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
-    return {
-        key: df[(df["Produktionsdatum"] >= start) & (df["Produktionsdatum"] <= end)]
-        for key, df in einzelteile.items()
-    }
-
-
-@st.cache_data(show_spinner="Computing market share & defect stats...")
-def compute_all_stats(start_str: str, end_str: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Cached on the (start, end) date strings only — switching pages without
-    changing the date filter hits this cache instantly instead of recomputing
-    nunique()/groupby over potentially millions of rows every rerun."""
-    einzelteile, _ = load_all_einzelteile()
-    filtered = apply_date_filter(einzelteile, (start_str, end_str))
-    ordered = [filtered[k] for k in FILES if k in filtered]
-    names = PART_NAMES[: len(ordered)]
-    stats_total = get_einzelteile_stats(ordered, names, oem1_only=False) if ordered else pd.DataFrame()
-    stats_oem1 = get_einzelteile_stats(ordered, names, oem1_only=True) if ordered else pd.DataFrame()
-    return stats_total, stats_oem1
-
-
-@st.cache_data(show_spinner="Computing engine penetration...")
-def compute_penetration_cached() -> tuple[list, float, float]:
-    """No date filter applies here (component tables have no production date),
-    so this only ever needs to run once per app session."""
-    engine_dfs, _, _ = load_engine_and_oem()
-    if not engine_dfs:
-        return [], None, None
-    _, percentages, overall_pct, overall_ratio = compute_engine_penetration(engine_dfs)
-    return percentages, overall_pct, overall_ratio
-
-
-# --------------------------------------------------------------------------------
-# 5. PAGES
-# --------------------------------------------------------------------------------
-def page_overview(stats_df: pd.DataFrame, overall_pct, overall_ratio, errors: list) -> None:
-    st.title("📊 Company 202 — Overview")
-    st.caption("Key figures for marketing: market share, quality, and engine penetration.")
-
-    for err in errors:
-        st.warning(f"Missing/unreadable data source: {err}")
-
-    if stats_df.empty:
-        st.info("No part data available yet — nothing to summarize.")
+    if df.empty:
+        st.info("No data available.")
         return
+    
+    (market_share, penetration_percentage, every_xth,
+     parts_202, part_types_202,
+     oem1_parts_202, oem1_total, defect_rate) = calc_overview_metrics(df)
+    
+    # RENDERING METRICS
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Market share (202)", f"{market_share}%")
+    col2.metric("Engine penetration", f"{penetration_percentage}%")
+    col3.metric("Defect rate (202)", f"{defect_rate}%")
+    col4.metric("Slogan", f"Every {every_xth}th engine")
+    
+    col5, col6, col7 = st.columns(3)
+    col5.metric("Total parts (202)", f"{parts_202:,}")
+    col6.metric("Part types (202)", f"{part_types_202}")
+    col7.metric("OEM1 volume (202)", f"{oem1_parts_202:,} / {oem1_total:,}")
 
-    total_parts = stats_df["total_unique_part_id"].sum()
-    parts_202 = stats_df["unique_part_id_202"].sum()
-    overall_share = round(parts_202 / total_parts * 100, 2) if total_parts else 0.0
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Overall market share (202)", f"{overall_share}%")
-    col2.metric("Engines with 202 parts", f"{overall_pct}%" if overall_pct is not None else "n/a")
-    col3.metric(
-        "Advertising slogan",
-        f"1 in {overall_ratio}" if overall_ratio not in (None, float("inf")) else "n/a",
-    )
+    # ------------------------------------------------------------------
+    # Interpretion of Overview metrics
+    # ------------------------------------------------------------------
+    competition_df = df[df["manufacturer"] != 202]
+    faulty_competition = competition_df[competition_df["faulty"] == 1]
+    defect_rate_competition = round(
+        len(faulty_competition) / len(competition_df) * 100, 2
+    ) if len(competition_df) > 0 else 0
 
     st.markdown("---")
-    fig = px.bar(
-        stats_df,
-        x="Part_Type",
-        y="relative_part_id_202_%",
-        color_discrete_sequence=[ACCENT_COLOR],
-        title="Market share of 202 parts by part type",
-        labels={"relative_part_id_202_%": "Market share (%)"},
+    st.subheader("What this means")
+
+    st.write(
+        f"202 supplies **{market_share}%** of all parts in the selected period, "
+        f"appearing in about **1 in every {every_xth} engines** produced."
     )
-    st.plotly_chart(fig, width='stretch')
 
+    diff = round(defect_rate - defect_rate_competition, 2)
+    if diff < 0:
+        st.write(
+            f"Our defect rate (**{defect_rate}%**) is **{abs(diff)} percentage points lower** "
+            f"than the competition's (**{defect_rate_competition}%**). 202 parts are relatively more reliable."
+        )
+    elif diff > 0:
+        st.write(
+            f"Our defect rate (**{defect_rate}%**) is **{diff} percentage points higher** "
+            f"than the competition's (**{defect_rate_competition}%**). A quality gap worth investigating."
+        )
+    else:
+        st.write(
+            f"Our defect rate (**{defect_rate}%**) is essentially **on par** with the "
+            f"competition's (**{defect_rate_competition}%**)."
+        )
 
-def page_market_share(stats_df: pd.DataFrame) -> None:
-    st.title("🧩 Market Share Analysis")
-    st.write("202 vs. competition, per part type (task 1).")
-    if stats_df.empty:
+@st.fragment
+def render_tab_market_share(df):
+    st.header("Market Share Analysis")
+
+    if df.empty:
         st.info("No data available.")
         return
 
-    melted = stats_df.melt(
-        id_vars="Part_Type",
-        value_vars=["unique_part_id_202", "unique_part_id_competition"],
-        var_name="Manufacturer",
-        value_name="count",
-    )
-    melted["Manufacturer"] = melted["Manufacturer"].map(
-        {"unique_part_id_202": "202", "unique_part_id_competition": "Competition"}
-    )
-    fig = px.bar(
-        melted,
-        x="Part_Type",
-        y="count",
-        color="Manufacturer",
-        barmode="group",
-        title="Unique parts produced: 202 vs. Competition",
-        color_discrete_map={"202": ACCENT_COLOR, "Competition": "#CCCCCC"},
-    )
-    st.plotly_chart(fig, width='stretch')
-    st.dataframe(stats_df, width='stretch')
+    # Calculating Stats
+    market_df, manufacturer_df = calc_market_share(df)
 
+    # Grouped Bar Chart
+    plot_bar(market_df, x="part_type", y="count", color="group", title="Parts Produced: 202 vs. Competition")
 
-def page_quality(stats_df_oem1: pd.DataFrame) -> None:
-    st.title("🛠️ Quality / Defect Analysis (OEM1)")
-    st.write("Relative defect frequency of 202 vs. competition, restricted to OEM1 vehicles (task 2).")
-    if stats_df_oem1.empty:
-        st.info("No OEM1-flagged data available (check that OEM1 files loaded correctly).")
-        return
+    # INTERPRETATION; Parts Produced bar chart
+    pivot = market_df.pivot(index="part_type", columns="group", values="count").fillna(0)
+    pivot["share_202_%"] = round(pivot.get("202", 0) / pivot.sum(axis=1) * 100, 2)
+    share_by_type = pivot["share_202_%"].reset_index()
+    best = share_by_type.loc[share_by_type["share_202_%"].idxmax()]
+    worst = share_by_type.loc[share_by_type["share_202_%"].idxmin()]
 
-    melted = stats_df_oem1.melt(
-        id_vars="Part_Type",
-        value_vars=[
-            "relative_faulty_unique_part_id_202_%",
-            "relative_faulty_unique_part_id_competition_%",
-        ],
-        var_name="Manufacturer",
-        value_name="Defect_rate_%",
-    )
-    melted["Manufacturer"] = melted["Manufacturer"].map(
-        {
-            "relative_faulty_unique_part_id_202_%": "202",
-            "relative_faulty_unique_part_id_competition_%": "Competition",
-        }
-    )
-    fig = px.bar(
-        melted,
-        x="Part_Type",
-        y="Defect_rate_%",
-        color="Manufacturer",
-        barmode="group",
-        title="Defect rate by part type (OEM1 vehicles only)",
-        color_discrete_map={"202": ACCENT_COLOR, "Competition": "#CCCCCC"},
-    )
-    st.plotly_chart(fig, width='stretch')
-    st.dataframe(stats_df_oem1, width='stretch')
-
-
-def page_engine_penetration(percentages: list, overall_pct, overall_ratio, errors: list) -> None:
-    st.title("⚙️ Engine Penetration")
-    st.write('Advertising claim: "In every x-th engine there are parts from 202." (task 3)')
-
-    for err in errors:
-        st.warning(f"Missing/unreadable data source: {err}")
-
-    if not percentages:
-        st.info("No engine/component data available yet.")
-        return
-
-    penetration_df = pd.DataFrame({"Engine_Type": ENGINE_NAMES[: len(percentages)], "Share_%": percentages})
-    penetration_df["Every_xth_engine"] = penetration_df["Share_%"].apply(
-        lambda p: round(100 / p, 2) if p else float("inf")
+    st.write(
+        f"**Interpretation:** 202 has its strongest position in **{best['part_type']}** "
+        f"({best['share_202_%']}% share), and its weakest in **{worst['part_type']}** "
+        f"({worst['share_202_%']}% share)."
     )
 
-    fig = px.bar(
-        penetration_df,
-        x="Engine_Type",
-        y="Share_%",
-        color_discrete_sequence=[ACCENT_COLOR],
-        title="Share of engines containing 202 parts, by engine type",
-        labels={"Share_%": "Engines with 202 parts (%)"},
-    )
-    st.plotly_chart(fig, width='stretch')
-    st.dataframe(penetration_df, width='stretch')
+    # TOTAL PIE Chart
+    plot_pie(manufacturer_df, names="manufacturer", values="count", title="Market Share by Brand", colors=manufacturer_colors)
+
+    # INTERPRETATION; Market Share by Brand
+    brand_share = manufacturer_df.copy()
+    brand_share["share_%"] = round(brand_share["count"] / brand_share["count"].sum() * 100, 2)
+    brand_share = brand_share.sort_values("share_%", ascending=False).reset_index(drop=True)
+
+    our_share = brand_share.loc[brand_share["manufacturer"] == 202, "share_%"].values[0]
+    our_rank = brand_share.index[brand_share["manufacturer"] == 202][0] + 1
+    n_manufacturers = len(brand_share)
+    competitors = brand_share[brand_share["manufacturer"] != 202]
+    largest_competitor = competitors.iloc[0] if not competitors.empty else None
 
     st.markdown("---")
-    st.subheader("Overall (all engine types combined)")
-    col1, col2 = st.columns(2)
-    col1.metric("Engines containing 202 parts", f"{overall_pct}%")
-    col2.metric("Slogan", f"1 in {overall_ratio} engines" if overall_ratio != float("inf") else "n/a")
+    if our_rank == 1 and largest_competitor is not None:
+        st.write(
+            f"**Interpretation:** 202 is the **market leader** with **{our_share}%** of all parts, "
+            f"ahead of its closest competitor (manufacturer {int(largest_competitor['manufacturer'])}, "
+            f"{largest_competitor['share_%']}%)."
+        )
+    elif largest_competitor is not None:
+        st.write(
+            f"**Interpretation:** 202 holds **{our_share}%** of the market, ranking "
+            f"**#{our_rank} out of {n_manufacturers}** manufacturers. The market leader is "
+            f"manufacturer {int(largest_competitor['manufacturer'])} with {largest_competitor['share_%']}%."
+        )
 
+    # DETAIL PIE; per part type (rebuilt from market_df, no df_copy needed)
+    selected_part = st.selectbox("Select a part type for detail view", df["part_type"].unique())
+    pie_df = market_df[market_df["part_type"] == selected_part][["group", "count"]]
 
-def page_data_table(einzelteile: dict, engine_dfs: list) -> None:
-    st.title("📋 Data Tables")
-    st.write("Raw (filtered) tables currently used by the app. A single merged final dataset is not yet available.")
+    plot_pie(pie_df, names="group", values="count", title=f"Market Share for {selected_part}", colors=group_colors)
 
-    if einzelteile:
-        st.subheader("Einzelteile (parts)")
-        selected = st.selectbox("Choose a part table", list(einzelteile.keys()))
-        st.dataframe(einzelteile[selected], width='stretch')
-        st.download_button(
-            f"Download {selected.upper()} as CSV",
-            data=einzelteile[selected].to_csv(index=False).encode("utf-8"),
-            file_name=f"{selected}_filtered.csv",
-            mime="text/csv",
+    # INTERPRETATION; Market Share for {selected_part}
+    part_total = pie_df["count"].sum()
+    part_202 = pie_df.loc[pie_df["group"] == "202", "count"].values
+    part_share_202 = round(part_202[0] / part_total * 100, 2) if part_total and len(part_202) else 0.0
+
+    diff = round(part_share_202 - our_share, 2)
+    st.markdown("---")
+    if diff > 0:
+        st.write(
+            f"**Interpretation:** For **{selected_part}**, 202 holds **{part_share_202}%** of the market; "
+            f"**{diff} points above** its overall average share ({our_share}%). "
+            f"This is a relative strength for 202."
+        )
+    elif diff < 0:
+        st.write(
+            f"**Interpretation:** For **{selected_part}**, 202 holds **{part_share_202}%** of the market; "
+            f"**{abs(diff)} points below** its overall average share ({our_share}%). "
+            f"This part type is a relative weak spot for 202."
         )
     else:
-        st.info("Part data not loaded.")
-
-    if engine_dfs:
-        st.subheader("Engine / component tables")
-        idx = st.selectbox(
-            "Choose an engine table", range(len(engine_dfs)), format_func=lambda i: ENGINE_NAMES[i]
+        st.write(
+            f"**Interpretation:** For **{selected_part}**, 202's share ({part_share_202}%) "
+            f"exactly matches its overall average ({our_share}%)."
         )
-        st.dataframe(engine_dfs[idx], width='stretch')
-    else:
-        st.info("Engine/component data not loaded.")
 
 
-# --------------------------------------------------------------------------------
-# 6. MAIN
-# --------------------------------------------------------------------------------
-def main() -> None:
-    inject_custom_css()
+def render_tab_engine_penetration(df):
+    st.header("Engine Penetration")
 
-    einzelteile, part_errors = load_all_einzelteile()
-    engine_dfs, oem_combined, engine_errors = load_engine_and_oem()
-    add_oem1_flags(engine_dfs, oem_combined, einzelteile)
+    if df.empty:
+        st.info("No data available.")
+        return
+    
+    # STATS
+    from_202, total, pen_df, presence = calc_engine_penetration(df)
+    
+    # SLOGAN
+    total_engines = pen_df["Total Engines"].sum()
+    total_with_202 = pen_df["Engines with 202"].sum()
+    every_x = round(total_engines / total_with_202, 2)
+    st.info(f"In every {every_x}th engine there are parts from 202")
+    
+    # TOTAL PIE CHART
+    share_df = pd.DataFrame({
+        "group": ["202", "Competition"],
+        "count": [from_202, total - from_202]
+    })
+    
+    plot_pie(share_df, names="group", values="count", title="Overall Part Share in All Engines")
 
-    filters = render_sidebar(einzelteile)
-    date_range = filters["date_range"]
-    start_str = str(date_range[0]) if date_range else ""
-    end_str = str(date_range[1]) if date_range and len(date_range) == 2 else ""
-
-    stats_total, stats_oem1 = compute_all_stats(start_str, end_str)
-    active_stats = stats_oem1 if filters["oem1_only"] else stats_total
-
-    percentages, overall_pct, overall_ratio = compute_penetration_cached()
-
-    einzelteile_filtered = apply_date_filter(einzelteile, date_range)
-
-    page = st.sidebar.radio(
-        "Navigate",
-        ["Overview", "Market Share", "Quality (OEM1)", "Engine Penetration", "Data Table"],
+    # INTERPRETATION; Overall Part Share
+    overall_share_pct = round(from_202 / total * 100, 2) if total else 0.0
+    st.write(
+        f"**Interpretation:** Across all tracked engines, 202 parts make up **{overall_share_pct}%** "
+        f"of everything installed; consistent with the overall 1-in-{every_x} engine penetration figure above."
     )
 
-    if page == "Overview":
-        page_overview(active_stats, overall_pct, overall_ratio, part_errors + engine_errors)
-    elif page == "Market Share":
-        page_market_share(active_stats)
-    elif page == "Quality (OEM1)":
-        page_quality(stats_oem1)
-    elif page == "Engine Penetration":
-        page_engine_penetration(percentages, overall_pct, overall_ratio, engine_errors)
-    elif page == "Data Table":
-        page_data_table(einzelteile_filtered, engine_dfs)
+    # HORIZONTAL BAR CHART
+    plot_bar(pen_df, x="Penetration %", y="engine_type", orientation="h", title="Share of Engines Containing 202 Parts")
+
+    # INTERPRETATION; Penetration by engine type
+    best_engine = pen_df.loc[pen_df["Penetration %"].idxmax()]
+    worst_engine = pen_df.loc[pen_df["Penetration %"].idxmin()]
+    spread = round(float(best_engine["Penetration %"]) - float(worst_engine["Penetration %"]), 2) # type: ignore
+
+    st.write(
+        f"**Interpretation:** 202 parts are most common in **{best_engine['engine_type']}** engines "
+        f"(**{best_engine['Penetration %']}%** penetration, roughly 1 in {best_engine['Every x-th']}), "
+        f"and least common in **{worst_engine['engine_type']}** "
+        f"(**{worst_engine['Penetration %']}%**, roughly 1 in {worst_engine['Every x-th']})."
+    )
+    if spread > 20:
+        st.write(
+            f"This is a **{spread}-point gap** between engine types; worth investigating why "
+            f"202's presence varies so much across engine platforms."
+        )
+    
+    # PRESENCE HEATMAP
+    fig_heat = px.imshow(
+        presence, title="Part Presence by Engine Type",
+        labels=dict(x="Part Type", y="Engine Type", color="Present"),
+        color_continuous_scale=["#FFFFFF", "#ADD8E6"]
+    )
+    st.plotly_chart(fig_heat, width="stretch")
+
+    # INTERPRETATION; Presence heatmap
+    part_coverage = presence.sum(axis=0)  # how many engine types each part type appears in
+    n_engine_types = presence.shape[0]
+    universal_parts = part_coverage[part_coverage == n_engine_types].index.tolist()
+    exclusive_parts = part_coverage[part_coverage == 1].index.tolist()
+
+    st.markdown("---")
+    if universal_parts:
+        st.write(
+            f"**Interpretation:** part type(s) **{', '.join(universal_parts)}** are installed across "
+            f"**all {n_engine_types} tracked engine types**; a shared/standard component."
+        )
+    if exclusive_parts:
+        st.write(
+            f"Part type(s) **{', '.join(exclusive_parts)}** appear in **only one** engine type; "
+            f"these are platform-specific components rather than standard parts."
+        )
+    if not universal_parts and not exclusive_parts:
+        st.write(
+            "**Interpretation:** part usage is mixed across engine types, with no single part "
+            "used everywhere or restricted to just one platform."
+        )
+    
+    # TABLE
+    st.dataframe(pen_df)
+
+@st.fragment
+def render_tab_quality_analysis(df):
+    st.title("Quality and Defect Analysis")
+    st.caption("Shows the quality metrics of the products, for OEM1 vehicles only")
+    if df.empty:
+        st.info("No data available.")
+        return
+    
+    # CALCULATING STATS
+    oem1_df, defect_stats = calc_quality_stats(df)
+    
+    # GROUPED BARPLOT
+    plot_bar(defect_stats, x="part_type", y="defect_rate_%", color="group", title="Defect Rate: 202 vs. Competition (OEM1 Only)")
+
+    # INTERPRETATION; per part type
+    st.write("**Interpretation, per part type (OEM1 vehicles):**")
+    better_count, worse_count = 0, 0
+    for pt in defect_stats["part_type"].unique():
+        row_202 = defect_stats[(defect_stats["part_type"] == pt) & (defect_stats["group"] == "202")]
+        row_comp = defect_stats[(defect_stats["part_type"] == pt) & (defect_stats["group"] == "Competition")]
+        if row_202.empty or row_comp.empty:
+            continue
+        r202 = row_202["defect_rate_%"].values[0]
+        rcomp = row_comp["defect_rate_%"].values[0]
+        diff = round(r202 - rcomp, 2)
+        if diff < 0:
+            verdict = f"**{abs(diff)} points lower than**"
+            better_count += 1
+        elif diff > 0:
+            verdict = f"**{diff} points higher than**"
+            worse_count += 1
+        else:
+            verdict = "**equal to**"
+        st.write(f"- **{pt}**: our rate ({r202}%) is {verdict} the competition's ({rcomp}%).")
+
+    st.markdown("---")
+    if better_count > worse_count:
+        st.write(
+            f"**Overall:** 202 has a **lower defect rate** than the competition in "
+            f"{better_count} out of {better_count + worse_count} part types; a generally favorable quality position."
+        )
+    elif worse_count > better_count:
+        st.write(
+            f"**Overall:** 202 has a **higher defect rate** than the competition in "
+            f"{worse_count} out of {better_count + worse_count} part types; this is a quality concern worth addressing."
+        )
+    else:
+        st.write("**Overall:** 202's quality position is mixed, roughly balanced between better and worse part types.")
+    
+    # LINE CHART (OVER TIME)
+    selected_part = st.selectbox("Select part for trend view", oem1_df["part_type"].unique(), key="quality_part")
+    trend_df = oem1_df[oem1_df["part_type"] == selected_part].copy()
+    trend_df["month"] = trend_df["production_date"].dt.to_period("M").astype(str)
+
+    trend_agg = trend_df.groupby(["month", "group"]).agg(
+        total=("faulty", "count"),
+        faulty=("faulty", "sum")
+    ).reset_index()
+    trend_agg["defect_rate_%"] = round(trend_agg["faulty"] / trend_agg["total"] * 100, 2)
+
+    fig_line = px.line(
+        trend_agg,
+        x="month", y="defect_rate_%", color="group",
+        title=f"Defect Rate Trend for {selected_part} (OEM1)",
+        labels={"defect_rate_%": "Defect Rate (%)", "month": "Month", "group": "Manufacturer"},
+        color_discrete_map={"202": "#ADD8E6", "Competition": "#CCCCCC"}
+    )
+    fig_line.update_xaxes(type="category")
+    st.plotly_chart(fig_line, width="stretch")
+
+    # INTERPRETATION; trend
+    trend_pivot = trend_agg.pivot(index="month", columns="group", values="defect_rate_%").sort_index()
+    st.markdown("---")
+    if "202" in trend_pivot.columns and "Competition" in trend_pivot.columns and len(trend_pivot) >= 2:
+        first_gap = round(trend_pivot["202"].iloc[0] - trend_pivot["Competition"].iloc[0], 2)
+        last_gap = round(trend_pivot["202"].iloc[-1] - trend_pivot["Competition"].iloc[-1], 2)
+        latest_month = trend_pivot.index[-1]
+        latest_202 = trend_pivot["202"].iloc[-1]
+        latest_comp = trend_pivot["Competition"].iloc[-1]
+
+        st.write(
+            f"**Interpretation:** in the most recent month with data ({latest_month}), "
+            f"202's defect rate for **{selected_part}** was **{latest_202}%** vs. "
+            f"**{latest_comp}%** for the competition."
+        )
+
+        if abs(last_gap) < abs(first_gap):
+            st.write(
+                f"The gap between 202 and the competition has **narrowed** over time "
+                f"(from {first_gap} to {last_gap} percentage points)."
+            )
+        elif abs(last_gap) > abs(first_gap):
+            st.write(
+                f"The gap between 202 and the competition has **widened** over time "
+                f"(from {first_gap} to {last_gap} percentage points)."
+            )
+        else:
+            st.write("The gap between 202 and the competition has stayed roughly stable over time.")
+    else:
+        st.write("Not enough data across months to comment on the trend for this part type.")
 
 
+@st.fragment
+def render_tab_data_table(df):
+    st.header("Final Dataset")
+
+    # SELECTION FILTERS
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        select_parts = st.multiselect("Part type", df["part_type"].unique(), default=df["part_type"].unique())
+    with col2:
+        select_engines = st.multiselect("Engine type", df["engine_type"].unique(), default=df["engine_type"].unique())
+    with col3:
+        select_oem = st.multiselect("OEM", df["OEM_type"].unique(), default=df["OEM_type"].unique())
+
+    table_df = df[
+        (df["part_type"].isin(select_parts)) &
+        (df["engine_type"].isin(select_engines)) &
+        (df["OEM_type"].isin(select_oem))
+    ]
+
+    st.write(f"Showing {len(table_df):,} of {len(df):,} rows")
+    st.dataframe(table_df, width="stretch")
+    
 if __name__ == "__main__":
-    main()
+
+    data = load_data()
+
+    with st.sidebar:
+        st.image("www/logo.png")
+        st.title("Production Data Dashboard")
+        st.write("Marketing Analysis in our 202 company")
+        
+        data = filter_data_by_date(data)
+
+
+    # Create tabs for different sections of the dashboard
+    tab_overview, tab_market_share, tab_engine_penetration, tab_quality_analysis, tab_data_table = st.tabs([
+        "Overview", "Market share", "Engine penetration", "Quality analysis", "Data table"])
+
+
+    # OVERVIEW
+    with tab_overview:
+        render_tab_overview(data)
+
+    # MARKET SHARE
+    with tab_market_share:
+        render_tab_market_share(data)
+        
+    # ENGINE PENETRATION
+    with tab_engine_penetration:
+        render_tab_engine_penetration(data)
+
+    # QUALITY ANALYSIS
+    with tab_quality_analysis:
+        render_tab_quality_analysis(data)
+        
+    # DATA TABLE
+    with tab_data_table:
+        render_tab_data_table(data)
