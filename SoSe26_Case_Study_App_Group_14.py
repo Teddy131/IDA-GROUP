@@ -52,8 +52,17 @@ html, body, [class*="css"] {
 # LOADING DATA AND CACHING
 @st.cache_data
 def load_data():
-    # Parquet is loading 10x-15x faster during the intial import
-    df = pd.read_parquet("additional_files/final_data_group_14.parquet")
+    try:
+        # Parquet is loading 10x-15x faster during the intial import
+        df = pd.read_parquet("SoSe26_Case_Study_finalData_Group_14.parquet")
+    except Exception:
+        # Fallback if parquet isnt installed
+        df = pd.read_csv("SoSe26_Case_Study_finalData_Group_14.csv",
+                         parse_dates=["production_date"])
+        # Bug with pands 3, fixing datatypes for streamlit
+        string_cols = df.select_dtypes(include=["string", "object"]).columns
+        for col in string_cols:
+            df[col] = df[col].astype(object)
     return df
 
 # DATE FILTER
