@@ -161,6 +161,41 @@ def render_tab_overview(df):
     col5.metric("Part types (202)", f"{part_types_202}")
     col6.metric("OEM1 volume (202)", f"{oem1_parts_202:,} / {oem1_total:,}")
     col7.metric("Defect rate (202)", f"{defect_rate}%")
+
+
+        # ------------------------------------------------------------------
+    # Interpretion of Overview metrics
+    # ------------------------------------------------------------------
+    competition_df = df[df["manufacturer"] != 202]
+    faulty_competition = competition_df[competition_df["faulty"] == 1]
+    defect_rate_competition = round(
+        len(faulty_competition) / len(competition_df) * 100, 2
+    ) if len(competition_df) > 0 else 0
+
+    st.markdown("---")
+    st.subheader("What this means")
+
+    st.write(
+        f"202 supplies **{market_share}%** of all parts in the selected period, "
+        f"appearing in about **1 in every {every_xth} engines** produced."
+    )
+
+    diff = round(defect_rate - defect_rate_competition, 2)
+    if diff < 0:
+        st.write(
+            f"Our defect rate (**{defect_rate}%**) is **{abs(diff)} percentage points lower** "
+            f"than the competition's (**{defect_rate_competition}%**) — 202 parts are relatively more reliable."
+        )
+    elif diff > 0:
+        st.write(
+            f"Our defect rate (**{defect_rate}%**) is **{diff} percentage points higher** "
+            f"than the competition's (**{defect_rate_competition}%**) — a quality gap worth investigating."
+        )
+    else:
+        st.write(
+            f"Our defect rate (**{defect_rate}%**) is essentially **on par** with the "
+            f"competition's (**{defect_rate_competition}%**)."
+        )
     st.write(f"overview total: {time.time() - t:.2f}s")
 
 @st.fragment
@@ -171,24 +206,88 @@ def render_tab_market_share(df):
     if df.empty:
         st.info("No data available.")
         return
-    
+
     # Calculating Stats
     market_df, manufacturer_df = calc_market_share(df)
-    
+
     # Grouped Bar Chart
     plot_bar(market_df, x="part_type", y="count", color="group", title="Parts Produced: 202 vs. Competition")
-    
+
+    # INTERPRETATION — Parts Produced bar chart
+    pivot = market_df.pivot(index="part_type", columns="group", values="count").fillna(0)
+    pivot["share_202_%"] = round(pivot.get("202", 0) / pivot.sum(axis=1) * 100, 2)
+    share_by_type = pivot["share_202_%"].reset_index()
+    best = share_by_type.loc[share_by_type["share_202_%"].idxmax()]
+    worst = share_by_type.loc[share_by_type["share_202_%"].idxmin()]
+
+    st.write(
+        f"**Interpretation:** 202 has its strongest position in **{best['part_type']}** "
+        f"({best['share_202_%']}% share), and its weakest in **{worst['part_type']}** "
+        f"({worst['share_202_%']}% share)."
+    )
+
     # TOTAL PIE Chart
     plot_pie(manufacturer_df, names="manufacturer", values="count", title="Market Share by Brand", colors=manufacturer_colors)
-    
-    # Pie Chart
-    #selected_part = st.selectbox("Select a part type for detail view", df["part_type"].unique())
-    #part_df = df_copy[df_copy["part_type"] == selected_part]
-    #pie_df = part_df.groupby("group").size().reset_index(name="count")
-    
-    #plot_pie(pie_df, names = "group", values = "count", title = f"Market Share for {selected_part}", colors = group_colors)
+
+    # INTERPRETATION — Market Share by Brand
+    brand_share = manufacturer_df.copy()
+    brand_share["share_%"] = round(brand_share["count"] / brand_share["count"].sum() * 100, 2)
+    brand_share = brand_share.sort_values("share_%", ascending=False).reset_index(drop=True)
+
+    our_share = brand_share.loc[brand_share["manufacturer"] == 202, "share_%"].values[0]
+    our_rank = brand_share.index[brand_share["manufacturer"] == 202][0] + 1
+    n_manufacturers = len(brand_share)
+    competitors = brand_share[brand_share["manufacturer"] != 202]
+    largest_competitor = competitors.iloc[0] if not competitors.empty else None
+
+    st.markdown("---")
+    if our_rank == 1:
+        st.write(
+            f"**Interpretation:** 202 is the **market leader** with **{our_share}%** of all parts, "
+            f"ahead of its closest competitor (manufacturer {int(largest_competitor['manufacturer'])}, "
+            f"{largest_competitor['share_%']}%)."
+        )
+    else:
+        st.write(
+            f"**Interpretation:** 202 holds **{our_share}%** of the market, ranking "
+            f"**#{our_rank} out of {n_manufacturers}** manufacturers. The market leader is "
+            f"manufacturer {int(largest_competitor['manufacturer'])} with {largest_competitor['share_%']}%."
+        )
+    st.write(f"Combined, all competitors together hold **{round(100 - our_share, 2)}%** of the market.")
+
+    # DETAIL PIE — per part type (rebuilt from market_df, no df_copy needed)
+    selected_part = st.selectbox("Select a part type for detail view", df["part_type"].unique())
+    pie_df = market_df[market_df["part_type"] == selected_part][["group", "count"]]
+
+    plot_pie(pie_df, names="group", values="count", title=f"Market Share for {selected_part}", colors=group_colors)
+
+    # INTERPRETATION — Market Share for {selected_part}
+    part_total = pie_df["count"].sum()
+    part_202 = pie_df.loc[pie_df["group"] == "202", "count"].values
+    part_share_202 = round(part_202[0] / part_total * 100, 2) if part_total and len(part_202) else 0.0
+
+    diff = round(part_share_202 - our_share, 2)
+    st.markdown("---")
+    if diff > 0:
+        st.write(
+            f"**Interpretation:** For **{selected_part}**, 202 holds **{part_share_202}%** of the market — "
+            f"**{diff} points above** its overall average share ({our_share}%). "
+            f"This is a relative strength for 202."
+        )
+    elif diff < 0:
+        st.write(
+            f"**Interpretation:** For **{selected_part}**, 202 holds **{part_share_202}%** of the market — "
+            f"**{abs(diff)} points below** its overall average share ({our_share}%). "
+            f"This part type is a relative weak spot for 202."
+        )
+    else:
+        st.write(
+            f"**Interpretation:** For **{selected_part}**, 202's share ({part_share_202}%) "
+            f"exactly matches its overall average ({our_share}%)."
+        )
+
     st.write(f"market share total: {time.time() - t:.2f}s")
-        
+
 def render_tab_engine_penetration(df):
     t = time.time()
     st.header("Engine Penetration")
@@ -213,10 +312,33 @@ def render_tab_engine_penetration(df):
     })
     
     plot_pie(share_df, names = "group", values = "count", title = "Overall Part Share in All Engines")
-    
-    
+
+    # INTERPRETATION — Overall Part Share
+    overall_share_pct = round(from_202 / total * 100, 2) if total else 0.0
+    st.write(
+        f"**Interpretation:** Across all tracked engines, 202 parts make up **{overall_share_pct}%** "
+        f"of everything installed — consistent with the overall 1-in-{every_x} engine penetration figure above."
+    )
+
     # HORIZONTAL BAR CHART
     plot_bar(pen_df, x = "Penetration %", y = "engine_type", orientation = "h", title = "Share of Engines Containing 202 Parts")
+
+    # INTERPRETATION — Penetration by engine type
+    best_engine = pen_df.loc[pen_df["Penetration %"].idxmax()]
+    worst_engine = pen_df.loc[pen_df["Penetration %"].idxmin()]
+    spread = round(best_engine["Penetration %"] - worst_engine["Penetration %"], 2)
+
+    st.write(
+        f"**Interpretation:** 202 parts are most common in **{best_engine['engine_type']}** engines "
+        f"(**{best_engine['Penetration %']}%** penetration, roughly 1 in {best_engine['Every x-th']}), "
+        f"and least common in **{worst_engine['engine_type']}** "
+        f"(**{worst_engine['Penetration %']}%**, roughly 1 in {worst_engine['Every x-th']})."
+    )
+    if spread > 20:
+        st.write(
+            f"This is a **{spread}-point gap** between engine types — worth investigating why "
+            f"202's presence varies so much across engine platforms."
+        )
     
     # PRESENCE HEATMAP
     fig_heat = px.imshow(
@@ -225,6 +347,29 @@ def render_tab_engine_penetration(df):
         color_continuous_scale=["#FFFFFF", "#ADD8E6"]
     )
     st.plotly_chart(fig_heat, width="stretch")
+
+    # INTERPRETATION — Presence heatmap
+    part_coverage = presence.sum(axis=0)  # how many engine types each part type appears in
+    n_engine_types = presence.shape[0]
+    universal_parts = part_coverage[part_coverage == n_engine_types].index.tolist()
+    exclusive_parts = part_coverage[part_coverage == 1].index.tolist()
+
+    st.markdown("---")
+    if universal_parts:
+        st.write(
+            f"**Interpretation:** part type(s) **{', '.join(universal_parts)}** are installed across "
+            f"**all {n_engine_types} tracked engine types** — a shared/standard component."
+        )
+    if exclusive_parts:
+        st.write(
+            f"Part type(s) **{', '.join(exclusive_parts)}** appear in **only one** engine type — "
+            f"these are platform-specific components rather than standard parts."
+        )
+    if not universal_parts and not exclusive_parts:
+        st.write(
+            "**Interpretation:** part usage is mixed across engine types, with no single part "
+            "used everywhere or restricted to just one platform."
+        )
     
     # TABLE
     st.dataframe(pen_df)
@@ -246,6 +391,41 @@ def render_tab_quality_analysis(df):
     
     # GROUPED BARPLOT
     plot_bar(defect_stats, x = "part_type", y = "defect_rate_%", color = "group", title = "Defect Rate: 202 vs. Competition (OEM1 Only)")
+
+    # INTERPRETATION — per part type
+    st.write("**Interpretation, per part type (OEM1 vehicles):**")
+    better_count, worse_count = 0, 0
+    for pt in defect_stats["part_type"].unique():
+        row_202 = defect_stats[(defect_stats["part_type"] == pt) & (defect_stats["group"] == "202")]
+        row_comp = defect_stats[(defect_stats["part_type"] == pt) & (defect_stats["group"] == "Competition")]
+        if row_202.empty or row_comp.empty:
+            continue
+        r202 = row_202["defect_rate_%"].values[0]
+        rcomp = row_comp["defect_rate_%"].values[0]
+        diff = round(r202 - rcomp, 2)
+        if diff < 0:
+            verdict = f"**{abs(diff)} points lower than**"
+            better_count += 1
+        elif diff > 0:
+            verdict = f"**{diff} points higher than**"
+            worse_count += 1
+        else:
+            verdict = "**equal to**"
+        st.write(f"- **{pt}**: our rate ({r202}%) is {verdict} the competition's ({rcomp}%).")
+
+    st.markdown("---")
+    if better_count > worse_count:
+        st.write(
+            f"**Overall:** 202 has a **lower defect rate** than the competition in "
+            f"{better_count} out of {better_count + worse_count} part types — a generally favorable quality position."
+        )
+    elif worse_count > better_count:
+        st.write(
+            f"**Overall:** 202 has a **higher defect rate** than the competition in "
+            f"{worse_count} out of {better_count + worse_count} part types — this is a quality concern worth addressing."
+        )
+    else:
+        st.write("**Overall:** 202's quality position is mixed, roughly balanced between better and worse part types.")
     
     # LINE CHART (OVER TIME)
     selected_part = st.selectbox("Select part for trend view", oem1_df["part_type"].unique(), key="quality_part")
@@ -267,6 +447,38 @@ def render_tab_quality_analysis(df):
     )
     fig_line.update_xaxes(type="category")
     st.plotly_chart(fig_line, width="stretch")
+
+    # INTERPRETATION — trend
+    trend_pivot = trend_agg.pivot(index="month", columns="group", values="defect_rate_%").sort_index()
+    st.markdown("---")
+    if "202" in trend_pivot.columns and "Competition" in trend_pivot.columns and len(trend_pivot) >= 2:
+        first_gap = round(trend_pivot["202"].iloc[0] - trend_pivot["Competition"].iloc[0], 2)
+        last_gap = round(trend_pivot["202"].iloc[-1] - trend_pivot["Competition"].iloc[-1], 2)
+        latest_month = trend_pivot.index[-1]
+        latest_202 = trend_pivot["202"].iloc[-1]
+        latest_comp = trend_pivot["Competition"].iloc[-1]
+
+        st.write(
+            f"**Interpretation:** in the most recent month with data ({latest_month}), "
+            f"202's defect rate for **{selected_part}** was **{latest_202}%** vs. "
+            f"**{latest_comp}%** for the competition."
+        )
+
+        if abs(last_gap) < abs(first_gap):
+            st.write(
+                f"The gap between 202 and the competition has **narrowed** over time "
+                f"(from {first_gap} to {last_gap} percentage points)."
+            )
+        elif abs(last_gap) > abs(first_gap):
+            st.write(
+                f"The gap between 202 and the competition has **widened** over time "
+                f"(from {first_gap} to {last_gap} percentage points)."
+            )
+        else:
+            st.write("The gap between 202 and the competition has stayed roughly stable over time.")
+    else:
+        st.write("Not enough data across months to comment on the trend for this part type.")
+
     st.write(f"quality analysis total: {time.time() - t:.2f}s")
 
 @st.fragment  
