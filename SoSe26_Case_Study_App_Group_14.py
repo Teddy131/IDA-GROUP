@@ -1,10 +1,25 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+import plotly.io as pio
 import numpy as np
+
+# Source Sans Pro is now published as Source Sans and ships with Streamlit
+FONT_STACK = "Source Sans Pro, Source Sans, sans-serif"
+
+# Use the same font in the charts as in the rest of the app
+pio.templates["ida"] = go.layout.Template(layout=dict(font=dict(family=FONT_STACK)))
+pio.templates.default = "plotly+ida"
 
 # Page Config
 st.set_page_config(page_title="202 Marketing Dashboard", layout="wide")
+
+# Apply the font to the whole page
+st.markdown(
+    f"<style>html, body, [class*='css'] {{ font-family: {FONT_STACK}; }}</style>",
+    unsafe_allow_html=True,
+)
 
 # Colors
 color_202 = "#ADD8E6"
@@ -39,16 +54,6 @@ def plot_pie(df, names, title, values=None, colors=group_colors):
     st.plotly_chart(fig, width="stretch")
     return fig
     
-# CSS Injection
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap');
-html, body, [class*="css"] {
-    font-family: 'Source Sans Pro', sans-serif;
-}
-</style>
-""", unsafe_allow_html=True)
-
 # LOADING DATA AND CACHING
 @st.cache_data
 def load_data():
@@ -234,7 +239,8 @@ def render_tab_market_share(df):
     )
 
     # TOTAL PIE Chart
-    plot_pie(manufacturer_df, names="manufacturer", values="count", title="Market Share by Brand", colors=manufacturer_colors)
+    plot_pie(manufacturer_df, names="manufacturer", values="count",
+             title="Market Share by Brand", colors=manufacturer_colors)
 
     # INTERPRETATION; Market Share by Brand
     brand_share = manufacturer_df.copy()
@@ -390,7 +396,8 @@ def render_tab_quality_analysis(df):
     oem1_df, defect_stats = calc_quality_stats(df)
     
     # GROUPED BARPLOT
-    plot_bar(defect_stats, x="part_type", y="defect_rate_%", color="group", title="Defect Rate: 202 vs. Competition (OEM1 Only)")
+    plot_bar(defect_stats, x="part_type", y="defect_rate_%", color="group",
+             title="Defect Rate: 202 vs. Competition (OEM1 Only)")
 
     # INTERPRETATION; per part type
     st.write("**Interpretation, per part type (OEM1 vehicles):**")
@@ -524,12 +531,11 @@ if __name__ == "__main__":
         st.write("Case Study Group 14 - SoSe 2026")
         
         st.write("**Authors:**")
-        st.write("- Author 1")
-        st.write("- Author 2")
-        st.write("- Author 3")
-        st.write("- Author 4")
-        st.write("- Author 5")
-
+        st.write("- Ibrahim Gezer | 413044")
+        st.write("- Cagatay Kulakac | 412636")
+        st.write("- Fehmi Cem Yilmaz | 476211")
+        st.write("- Erol Saka | 484257")
+        st.write("- Leila Elkamel | 492215")
 
     # Create tabs for different sections of the dashboard
     tab_overview, tab_market_share, tab_engine_penetration, tab_quality_analysis, tab_data_table = st.tabs([
