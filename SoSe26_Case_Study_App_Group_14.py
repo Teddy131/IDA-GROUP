@@ -163,13 +163,14 @@ def render_tab_overview(df):
     col1.metric("Market share (202)", f"{market_share}%")
     col2.metric("Engine penetration", f"{penetration_percentage}%")
     col3.metric("Defect rate (202)", f"{defect_rate}%")
-    col4.metric("Slogan", f"Every {every_xth}th engine")
     
-    col5, col6, col7 = st.columns(3)
-    col5.metric("Total parts (202)", f"{parts_202:,}")
-    col6.metric("Part types (202)", f"{part_types_202}")
-    col7.metric("OEM1 volume (202)", f"{oem1_parts_202:,} / {oem1_total:,}")
-
+    col4, col5, col6 = st.columns(3)
+    col4.metric("Total parts (202)", f"{parts_202:,}")
+    col5.metric("Part types (202)", f"{part_types_202}")
+    col6.metric("OEM1 volume (202)", f"{oem1_parts_202:,} / {oem1_total:,}")
+    
+    col7 = st.columns(1)[0]
+    col7.metric("Slogan", f"Every {every_xth}th engine")
 
     # ------------------------------------------------------------------
     # Interpretion of Overview metrics
