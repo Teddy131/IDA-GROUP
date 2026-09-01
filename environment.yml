@@ -16,4 +16,4 @@ dependencies:
   - jupyterlab
 
   # Web application
-  - streamlit        # not part of the standard Anaconda distribution
+  - streamlit

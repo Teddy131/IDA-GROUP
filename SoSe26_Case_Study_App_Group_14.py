@@ -499,8 +499,16 @@ def render_tab_data_table(df):
         (df["OEM_type"].isin(select_oem))
     ]
 
-    st.write(f"Showing {len(table_df):,} of {len(df):,} rows")
-    st.dataframe(table_df, width="stretch")
+    # Limiting rows, adding pagination to avoid performance issues
+    MAX_ROWS = 100
+    total_pages = (len(table_df) - 1) // MAX_ROWS + 1
+
+    st.write(f"{len(table_df):,} of {len(df):,} rows match the current filters")
+    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
+
+    start = (page - 1) * MAX_ROWS
+    st.caption(f"Page {page:,} of {total_pages:,}")
+    st.dataframe(table_df.iloc[start:start + MAX_ROWS], width="stretch")
     
 if __name__ == "__main__":
 
@@ -512,6 +520,15 @@ if __name__ == "__main__":
         st.write("Marketing Analysis in our 202 company")
         
         data = filter_data_by_date(data)
+        
+        st.write("Case Study Group 14 - SoSe 2026")
+        
+        st.write("**Authors:**")
+        st.write("- Author 1")
+        st.write("- Author 2")
+        st.write("- Author 3")
+        st.write("- Author 4")
+        st.write("- Author 5")
 
 
     # Create tabs for different sections of the dashboard
