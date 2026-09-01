@@ -491,6 +491,10 @@ def render_tab_quality_analysis(df):
 def render_tab_data_table(df):
     st.header("Final Dataset")
 
+    if df.empty:
+        st.info("No data available.")
+        return
+
     # SELECTION FILTERS
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -506,11 +510,16 @@ def render_tab_data_table(df):
         (df["OEM_type"].isin(select_oem))
     ]
 
+    st.write(f"{len(table_df):,} of {len(df):,} rows match the current filters")
+
+    if table_df.empty:
+        st.info("No rows match the current filters.")
+        return
+
     # Limiting rows, adding pagination to avoid performance issues
     MAX_ROWS = 100
     total_pages = (len(table_df) - 1) // MAX_ROWS + 1
 
-    st.write(f"{len(table_df):,} of {len(df):,} rows match the current filters")
     page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
 
     start = (page - 1) * MAX_ROWS
