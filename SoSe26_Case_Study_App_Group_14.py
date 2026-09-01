@@ -55,6 +55,7 @@ def load_data():
     try:
         # Parquet is loading 10x-15x faster during the intial import
         df = pd.read_parquet("SoSe26_Case_Study_finalData_Group_14.parquet")
+        
     except Exception:
         # Fallback if parquet isnt installed
         df = pd.read_csv("SoSe26_Case_Study_finalData_Group_14.csv",

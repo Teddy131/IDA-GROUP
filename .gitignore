@@ -1,7 +1,8 @@
 # Ignore final dataset
 additional_files/final_data_group_14.csv
 additional_files/final_data_group_14.parquet
-
+SoSe26_Case_Study_finalData_Group_14.csv
+SoSe26_Case_Study_finalData_Group_14.parquet
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
