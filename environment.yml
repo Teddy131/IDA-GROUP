@@ -1,0 +1,19 @@
+name: ida-group-14
+
+channels:
+  - conda-forge
+
+dependencies:
+  # Notebooks
+  - python=3.12
+  - pandas
+  - numpy
+  - plotly
+  - pyarrow          # required to read and write the final dataset as parquet
+  - scipy            # general tasks: statistical tests
+  - scikit-learn     # general tasks: decision tree and linear model
+  - matplotlib       # general tasks: plots
+  - jupyterlab
+
+  # Web application
+  - streamlit        # not part of the standard Anaconda distribution
